@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (large files)
+# Uncomment if you don't want to track data
+# data/prices/*.csv
+# data/weather/*.csv
+# data/processed/*.csv
+
+# Models (large files)
+models/*.zip
+models/checkpoints/
+models/best/
+
+# Outputs
+outputs/tensorboard/
+outputs/*.csv
+outputs/*.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
