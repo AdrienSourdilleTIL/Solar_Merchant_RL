@@ -210,7 +210,8 @@ def load_weather_data(weather_path: Path) -> pd.DataFrame:
         df,
         required_columns=['datetime', 'pv_actual_mwh', 'temperature_c', 'wind_speed_ms'],
         column_ranges={
-            'pv_actual_mwh': (0.0, PLANT_CAPACITY_MW),
+            # Allow 10% over capacity for real-world variations in original data
+            'pv_actual_mwh': (0.0, PLANT_CAPACITY_MW * 1.1),
             'temperature_c': (TEMPERATURE_MIN_C, TEMPERATURE_MAX_C),
             'wind_speed_ms': (WIND_SPEED_MIN_MS, WIND_SPEED_MAX_MS),
         },

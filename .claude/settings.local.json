@@ -6,7 +6,8 @@
       "Bash(npx bmad-method@alpha install:*)",
       "Bash(git clone:*)",
       "Skill(bmad:bmm:workflows:sprint-planning)",
-      "Skill(bmad:bmm:workflows:sprint-planning:*)"
+      "Skill(bmad:bmm:workflows:sprint-planning:*)",
+      "Bash(python:*)"
     ]
   }
 }

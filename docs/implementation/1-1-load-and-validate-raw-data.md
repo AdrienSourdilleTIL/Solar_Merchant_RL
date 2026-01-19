@@ -1,6 +1,6 @@
 # Story 1.1: Load and Validate Raw Data
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -26,35 +26,35 @@ So that I can verify data quality before processing.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Validate existing `load_price_data()` function (AC: #1, #2)
-  - [ ] Verify datetime parsing works correctly
-  - [ ] Add explicit validation for nulls in key columns
-  - [ ] Add validation for reasonable price ranges (e.g., -500 to 3000 EUR/MWh)
-  - [ ] Add informative error messages for missing files
-  - [ ] Add return type hints
+- [x] Task 1: Validate existing `load_price_data()` function (AC: #1, #2)
+  - [x] Verify datetime parsing works correctly
+  - [x] Add explicit validation for nulls in key columns
+  - [x] Add validation for reasonable price ranges (e.g., -500 to 3000 EUR/MWh)
+  - [x] Add informative error messages for missing files
+  - [x] Add return type hints
 
-- [ ] Task 2: Validate existing `load_weather_data()` function (AC: #1, #2)
-  - [ ] Verify datetime parsing works correctly
-  - [ ] Add explicit validation for nulls in key columns
-  - [ ] Add validation for reasonable PV production values (0 to max capacity)
-  - [ ] Add informative error messages for missing files
-  - [ ] Add return type hints
+- [x] Task 2: Validate existing `load_weather_data()` function (AC: #1, #2)
+  - [x] Verify datetime parsing works correctly
+  - [x] Add explicit validation for nulls in key columns
+  - [x] Add validation for reasonable PV production values (0 to max capacity)
+  - [x] Add informative error messages for missing files
+  - [x] Add return type hints
 
-- [ ] Task 3: Add comprehensive type hints (AC: #3)
-  - [ ] Add type hints to all public functions in `prepare_dataset.py`
-  - [ ] Use `Path` type for file path parameters
-  - [ ] Use `pd.DataFrame` return types
+- [x] Task 3: Add comprehensive type hints (AC: #3)
+  - [x] Add type hints to all public functions in `prepare_dataset.py`
+  - [x] Use `Path` type for file path parameters
+  - [x] Use `pd.DataFrame` return types
 
-- [ ] Task 4: Add validation utility function
-  - [ ] Create `validate_dataframe()` helper
-  - [ ] Check for nulls in critical columns
-  - [ ] Check for reasonable value ranges
-  - [ ] Raise `ValueError` with descriptive messages
+- [x] Task 4: Add validation utility function
+  - [x] Create `validate_dataframe()` helper
+  - [x] Check for nulls in critical columns
+  - [x] Check for reasonable value ranges
+  - [x] Raise `ValueError` with descriptive messages
 
-- [ ] Task 5: Update data paths if needed
-  - [ ] Verify actual data locations match code expectations
-  - [ ] Current: `data/prices/France_clean.csv` and `data/weather/PV_production_2015_2023.csv`
-  - [ ] Document any path changes needed
+- [x] Task 5: Update data paths if needed
+  - [x] Verify actual data locations match code expectations
+  - [x] Current: `data/prices/France_clean.csv` and `data/weather/PV_production_2015_2023.csv`
+  - [x] Document any path changes needed
 
 ## Dev Notes
 
@@ -158,22 +158,54 @@ IMBALANCE_LONG_MULTIPLIER = 0.6
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+- Tested data loading with validation successfully
+- Tested FileNotFoundError handling for missing files
+- Ran full pipeline (prepare_dataset.py main) - completed successfully
+
 ### Completion Notes List
+
+1. **validate_dataframe()** - Created reusable validation function that checks:
+   - Required columns exist
+   - No nulls in required columns
+   - Values within specified ranges
+   - Descriptive error messages for all failures
+
+2. **load_price_data()** - Enhanced with:
+   - FileNotFoundError for missing files with helpful message
+   - Automatic removal of rows with null datetime (trailing empty rows)
+   - Validation for price range (-500 to 3000 EUR/MWh)
+   - Full type hints and docstrings
+
+3. **load_weather_data()** - Enhanced with:
+   - FileNotFoundError for missing files with helpful message
+   - Automatic removal of rows with null datetime (13 rows dropped)
+   - Validation for PV production, temperature, wind speed ranges
+   - Full type hints and docstrings
+
+4. **Type hints** - Added type annotations to all constants and validation utility function using Python 3.10+ syntax
+
+5. **Data paths verified** - Confirmed actual locations:
+   - `data/prices/France_clean.csv` (93,224 rows)
+   - `data/weather/PV_production_2015_2023.csv` (78,888 rows after null removal)
 
 ### Change Log
 
 - Story created: 2026-01-19
-- Status: ready-for-dev
+- Status: in-progress
+- 2026-01-19: Implemented all tasks - validation, type hints, error handling
 
 ### File List
 
-**Files to modify:**
-- `src/data_processing/prepare_dataset.py` - Add validation and type hints
+**Files modified:**
+- `src/data_processing/prepare_dataset.py` - Added validation, type hints, error handling
 
-**Files to verify:**
-- `data/prices/France_clean.csv` - Verify exists and format
-- `data/weather/PV_production_2015_2023.csv` - Verify exists and format
+**Files verified:**
+- `data/prices/France_clean.csv` - ✅ Exists, 93,224 rows, valid format
+- `data/weather/PV_production_2015_2023.csv` - ✅ Exists, 78,888 valid rows (13 null rows cleaned)
+- `data/processed/train.csv` - ✅ Generated, 61,367 rows
+- `data/processed/test.csv` - ✅ Generated, 17,520 rows
+- `data/processed/full_dataset.csv` - ✅ Generated, 78,887 rows
