@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**Python 3.10+** | **Dependencies**: gymnasium, stable-baselines3, pandas, numpy, torch
+
 This project trains a **Reinforcement Learning agent** to operate a **utility-scale solar farm with battery storage** trading on the **day-ahead electricity market**.
 
 The agent learns to:
@@ -49,6 +51,13 @@ python evaluate.py
 
 # Compare rule-based baselines
 python baseline_rules.py
+```
+
+### Monitor Training
+
+```bash
+# View training metrics in TensorBoard
+tensorboard --logdir outputs/tensorboard
 ```
 
 ## Architecture

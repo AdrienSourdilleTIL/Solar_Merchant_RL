@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(./install-v6.sh)",
+      "Bash(npx bmad-method@alpha install:*)",
+      "Bash(git clone:*)",
+      "Skill(bmad:bmm:workflows:sprint-planning)",
+      "Skill(bmad:bmm:workflows:sprint-planning:*)"
+    ]
+  }
+}

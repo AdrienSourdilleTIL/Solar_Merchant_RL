@@ -21,36 +21,179 @@ import numpy as np
 from pathlib import Path
 
 # Configuration
-PLANT_CAPACITY_MW = 20.0  # 20 MW solar farm
-ORIGINAL_CAPACITY_KW = 5.0  # Original data was ~5 kW residential
-SCALE_FACTOR = (PLANT_CAPACITY_MW * 1000) / ORIGINAL_CAPACITY_KW  # 4000x
+PLANT_CAPACITY_MW: float = 20.0  # 20 MW solar farm
+ORIGINAL_CAPACITY_KW: float = 5.0  # Original data was ~5 kW residential
+SCALE_FACTOR: float = (PLANT_CAPACITY_MW * 1000) / ORIGINAL_CAPACITY_KW  # 4000x
 
 # Forecast error parameters (standard deviations as fraction of capacity)
 # Day-ahead forecast error is typically 15-25% RMSE for solar
-FORECAST_ERROR_STD = 0.15  # 15% of actual production
+FORECAST_ERROR_STD: float = 0.15  # 15% of actual production
 
 # Imbalance price parameters
 # When short (under-delivered): pay premium to buy balancing energy
 # When long (over-delivered): receive discount for excess energy
-IMBALANCE_SHORT_MULTIPLIER = 1.5  # Pay 1.5x day-ahead price when short
-IMBALANCE_LONG_MULTIPLIER = 0.6   # Receive 0.6x day-ahead price when long
+IMBALANCE_SHORT_MULTIPLIER: float = 1.5  # Pay 1.5x day-ahead price when short
+IMBALANCE_LONG_MULTIPLIER: float = 0.6   # Receive 0.6x day-ahead price when long
+
+# Validation range constants
+PRICE_MIN_EUR_MWH: float = -500.0  # Allow negative prices during oversupply
+PRICE_MAX_EUR_MWH: float = 3000.0  # Maximum reasonable price
+TEMPERATURE_MIN_C: float = -40.0
+TEMPERATURE_MAX_C: float = 50.0
+WIND_SPEED_MIN_MS: float = 0.0
+WIND_SPEED_MAX_MS: float = 50.0
+
+
+def validate_dataframe(
+    df: pd.DataFrame,
+    required_columns: list[str],
+    column_ranges: dict[str, tuple[float, float]] | None = None,
+    name: str = "DataFrame"
+) -> None:
+    """
+    Validate a DataFrame for nulls and value ranges.
+
+    Args:
+        df: DataFrame to validate.
+        required_columns: List of column names that must exist and have no nulls.
+        column_ranges: Dict mapping column names to (min, max) valid value tuples.
+        name: Descriptive name for error messages.
+
+    Raises:
+        ValueError: If validation fails with descriptive message.
+    """
+    # Check for missing required columns
+    missing_cols = [col for col in required_columns if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"{name}: Missing required columns: {missing_cols}. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    # Check for nulls in required columns
+    for col in required_columns:
+        null_count = df[col].isna().sum()
+        if null_count > 0:
+            raise ValueError(
+                f"{name}: Column '{col}' contains {null_count} null values "
+                f"({100 * null_count / len(df):.1f}% of rows)"
+            )
+
+    # Check value ranges if specified
+    if column_ranges:
+        for col, (min_val, max_val) in column_ranges.items():
+            if col not in df.columns:
+                continue  # Skip if column doesn't exist
+            below_min = (df[col] < min_val).sum()
+            above_max = (df[col] > max_val).sum()
+            if below_min > 0 or above_max > 0:
+                actual_min = df[col].min()
+                actual_max = df[col].max()
+                raise ValueError(
+                    f"{name}: Column '{col}' has values outside valid range "
+                    f"[{min_val}, {max_val}]. "
+                    f"Actual range: [{actual_min:.2f}, {actual_max:.2f}]. "
+                    f"Values below min: {below_min}, above max: {above_max}"
+                )
 
 
 def load_price_data(price_path: Path) -> pd.DataFrame:
-    """Load and clean day-ahead price data."""
+    """
+    Load and validate day-ahead price data from CSV.
+
+    Args:
+        price_path: Path to the price data CSV file.
+
+    Returns:
+        DataFrame with columns ['datetime', 'price_eur_mwh'].
+
+    Raises:
+        FileNotFoundError: If the price file does not exist.
+        ValueError: If required columns are missing or data validation fails.
+    """
+    # Check file exists
+    if not price_path.exists():
+        raise FileNotFoundError(
+            f"Price data file not found: {price_path}. "
+            f"Please ensure the file exists at this location."
+        )
+
     df = pd.read_csv(price_path, parse_dates=['datetime'])
+
+    # Drop rows with null datetime (trailing empty rows in CSV)
+    initial_len = len(df)
+    df = df.dropna(subset=['datetime'])
+    if len(df) < initial_len:
+        dropped = initial_len - len(df)
+        print(f"Note: Dropped {dropped} rows with null datetime from price data")
+
+    # Validate required columns exist
+    if 'price' not in df.columns:
+        raise ValueError(
+            f"Price data file missing required column 'price'. "
+            f"Available columns: {list(df.columns)}"
+        )
+    if 'datetime' not in df.columns:
+        raise ValueError(
+            f"Price data file missing required column 'datetime'. "
+            f"Available columns: {list(df.columns)}"
+        )
 
     # Keep only the wholesale price column, rename for clarity
     # Price is in EUR/kWh, convert to EUR/MWh for utility scale
     df['price_eur_mwh'] = df['price'] * 1000
     df = df[['datetime', 'price_eur_mwh']].copy()
 
+    # Validate the processed data
+    validate_dataframe(
+        df,
+        required_columns=['datetime', 'price_eur_mwh'],
+        column_ranges={'price_eur_mwh': (PRICE_MIN_EUR_MWH, PRICE_MAX_EUR_MWH)},
+        name="Price data"
+    )
+
     return df
 
 
 def load_weather_data(weather_path: Path) -> pd.DataFrame:
-    """Load weather/PV production data."""
+    """
+    Load and validate weather/PV production data from CSV.
+
+    Args:
+        weather_path: Path to the weather/PV data CSV file.
+
+    Returns:
+        DataFrame with columns ['datetime', 'pv_actual_mwh', 'irradiance_direct',
+        'irradiance_diffuse', 'temperature_c', 'wind_speed_ms'].
+
+    Raises:
+        FileNotFoundError: If the weather file does not exist.
+        ValueError: If required columns are missing or data validation fails.
+    """
+    # Check file exists
+    if not weather_path.exists():
+        raise FileNotFoundError(
+            f"Weather data file not found: {weather_path}. "
+            f"Please ensure the file exists at this location."
+        )
+
     df = pd.read_csv(weather_path, parse_dates=['datetime'])
+
+    # Drop rows with null datetime (trailing empty rows in CSV)
+    initial_len = len(df)
+    df = df.dropna(subset=['datetime'])
+    if len(df) < initial_len:
+        dropped = initial_len - len(df)
+        print(f"Note: Dropped {dropped} rows with null datetime from weather data")
+
+    # Validate required columns exist
+    required_raw_cols = ['datetime', 'P', 'Gb(i)', 'Gd(i)', 'T2m', 'WS10m']
+    missing_cols = [col for col in required_raw_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Weather data file missing required columns: {missing_cols}. "
+            f"Available columns: {list(df.columns)}"
+        )
 
     # P is production in kWh for original ~5kW system
     # Scale to 20 MW plant (in MWh)
@@ -61,6 +204,18 @@ def load_weather_data(weather_path: Path) -> pd.DataFrame:
     df = df[['datetime', 'pv_actual_mwh', 'Gb(i)', 'Gd(i)', 'T2m', 'WS10m']].copy()
     df.columns = ['datetime', 'pv_actual_mwh', 'irradiance_direct', 'irradiance_diffuse',
                   'temperature_c', 'wind_speed_ms']
+
+    # Validate the processed data
+    validate_dataframe(
+        df,
+        required_columns=['datetime', 'pv_actual_mwh', 'temperature_c', 'wind_speed_ms'],
+        column_ranges={
+            'pv_actual_mwh': (0.0, PLANT_CAPACITY_MW),
+            'temperature_c': (TEMPERATURE_MIN_C, TEMPERATURE_MAX_C),
+            'wind_speed_ms': (WIND_SPEED_MIN_MS, WIND_SPEED_MAX_MS),
+        },
+        name="Weather data"
+    )
 
     return df
 
