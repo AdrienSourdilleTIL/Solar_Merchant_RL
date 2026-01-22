@@ -51,7 +51,7 @@ development_status:
   # Epic 2: Trading Environment
   epic-2: in-progress
   2-1-environment-structure-and-registration: done
-  2-2-observation-construction: review
+  2-2-observation-construction: done
   2-3-battery-mechanics: backlog
   2-4-market-settlement-logic: backlog
   2-5-episode-flow-and-reset: backlog

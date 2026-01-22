@@ -304,16 +304,26 @@ class TestObservationPerformance:
         for _ in range(10):
             env._get_observation()
 
-        # Measure 1000 calls
-        start_time = time.time()
-        for _ in range(1000):
-            env._get_observation()
-        elapsed_time = time.time() - start_time
+        # Measure multiple runs for statistical reliability
+        times = []
+        for _ in range(5):  # 5 runs
+            start_time = time.time()
+            for _ in range(200):  # 200 calls per run
+                env._get_observation()
+            elapsed_time = time.time() - start_time
+            avg_per_call = (elapsed_time / 200) * 1000  # ms
+            times.append(avg_per_call)
 
-        avg_time_ms = (elapsed_time / 1000) * 1000  # Convert to ms
+        # Use p95 for robustness against outliers
+        times_sorted = sorted(times)
+        p95_time_ms = times_sorted[int(len(times) * 0.95)]
+        avg_time_ms = np.mean(times)
 
+        # Average should be well under 10ms, p95 allows some headroom for variance
         assert avg_time_ms < 10.0, \
-            f"Observation construction should be <10ms, got {avg_time_ms:.3f}ms"
+            f"Observation construction average should be <10ms, got {avg_time_ms:.3f}ms"
+        assert p95_time_ms < 15.0, \
+            f"Observation construction p95 should be <15ms, got {p95_time_ms:.3f}ms (avg: {avg_time_ms:.3f}ms)"
 
 
 class TestForecastWindowPadding:
@@ -348,3 +358,41 @@ class TestForecastWindowPadding:
 
         assert len(price_window) == 24, "Price window should be 24 hours"
         assert isinstance(price_window, np.ndarray), "Price window should be numpy array"
+
+    def test_forecast_window_at_dataset_boundary(self, env):
+        """Test that forecast/price windows are zero-padded near dataset end."""
+        # Force environment to near end of dataset
+        env.reset()
+        env.current_idx = len(env.data) - 10  # Only 10 hours left
+
+        obs = env._get_observation()
+
+        # Forecast window (indices 27-50)
+        forecast_window = obs[27:51]
+        assert len(forecast_window) == 24, "Forecast window should still be 24 dims"
+
+        # Last 14 values (24 - 10) should be zero-padded
+        # First 10 should have actual data
+        actual_data_portion = forecast_window[:10]
+        padded_portion = forecast_window[10:]
+
+        # Padded portion should be all zeros
+        assert np.all(padded_portion == 0.0), \
+            f"Expected zero padding for last 14 hours, got {padded_portion}"
+
+    def test_price_window_at_dataset_boundary(self, env):
+        """Test that price window is zero-padded near dataset end."""
+        # Force environment to near end of dataset
+        env.reset()
+        env.current_idx = len(env.data) - 5  # Only 5 hours left
+
+        obs = env._get_observation()
+
+        # Price window (indices 51-74)
+        price_window = obs[51:75]
+        assert len(price_window) == 24, "Price window should still be 24 dims"
+
+        # Last 19 values (24 - 5) should be zero-padded
+        padded_portion = price_window[5:]
+        assert np.all(padded_portion == 0.0), \
+            f"Expected zero padding for last 19 hours, got {padded_portion}"

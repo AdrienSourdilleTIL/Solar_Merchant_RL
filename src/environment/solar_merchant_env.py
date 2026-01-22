@@ -242,8 +242,9 @@ class SolarMerchantEnv(gym.Env):
 
         Performance:
         ============
-        Observation construction typically takes 3-5ms per call, well within the
-        200ms/step budget required for 5-second episode completion (NFR2).
+        Observation construction takes <10ms per call (typically 3-5ms), well within
+        the 200ms/step budget required for 5-second episode completion (NFR2).
+        Performance validated by test_observation_construction_performance.
 
         Returns:
             np.ndarray: 84-dimensional float32 observation vector
@@ -306,15 +307,25 @@ class SolarMerchantEnv(gym.Env):
              row['month_sin'], row['month_cos']],
         ]).astype(np.float32)
 
-        # Validation: Ensure observation shape is correct
-        assert obs.shape == (84,), \
-            f"Observation shape mismatch: expected (84,), got {obs.shape}"
+        # Defensive validation (development aid, minimal overhead)
+        if __debug__:  # Only runs when Python NOT started with -O flag
+            if obs.shape != (84,):
+                raise ValueError(f"Observation shape mismatch: expected (84,), got {obs.shape}")
+            if np.any(np.isnan(obs)):
+                raise ValueError("Observation contains NaN values")
+            if np.any(np.isinf(obs)):
+                raise ValueError("Observation contains Inf values")
 
-        # Validation: Check for invalid values
-        assert not np.any(np.isnan(obs)), \
-            "Observation contains NaN values"
-        assert not np.any(np.isinf(obs)), \
-            "Observation contains Inf values"
+            # Warn on unexpected range violations (non-critical)
+            if obs[0] < 0 or obs[0] >= 1:  # Hour should be [0, 1)
+                import warnings
+                warnings.warn(f"Hour outside expected range [0, 1): {obs[0]}", RuntimeWarning)
+            if obs[1] < 0 or obs[1] > 1:  # Battery SOC should be [0, 1]
+                import warnings
+                warnings.warn(f"Battery SOC outside expected range [0, 1]: {obs[1]}", RuntimeWarning)
+            if abs(obs[26]) > 2:  # Cumulative imbalance exceeds 2x capacity
+                import warnings
+                warnings.warn(f"Cumulative imbalance unusually large: {obs[26]}", RuntimeWarning)
 
         return obs
 

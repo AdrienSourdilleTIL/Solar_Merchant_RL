@@ -1,6 +1,6 @@
 # Story 2.2: Observation Construction
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -52,9 +52,9 @@ So that the agent has all information needed for decision making.
   - [x] Verify documentation matches implementation exactly
 
 - [x] Task 5: Enhance observation with additional validation (AC: #1)
-  - [x] Add assertions or warnings for out-of-range normalized values
-  - [x] Add shape validation in observation construction
-  - [x] Consider adding info dict with raw (unnormalized) observation components for debugging
+  - [x] Add shape validation in observation construction (using __debug__ checks)
+  - [x] Add NaN/Inf validation in observation construction
+  - [ ] Consider adding info dict with raw observation components - **Decision: Not implemented** (adds complexity, low value for current needs)
   - [x] Test observation construction performance (should be fast)
 
 ## Dev Notes
@@ -367,7 +367,8 @@ def _get_observation(self) -> np.ndarray:
 
 ## Change Log
 
-- **2026-01-22**: Story 2-2 completed - Validated observation construction (84 dims), added comprehensive test suite (22 tests), enhanced docstrings with detailed documentation, added defensive assertions for shape/NaN/Inf validation. Created observation-space-specification.md. All tests passing (44/44). Status → review.
+- **2026-01-22 (Initial)**: Story 2-2 implemented - Validated observation construction (84 dims), added comprehensive test suite (22 tests), enhanced docstrings with detailed documentation, added defensive validation for shape/NaN/Inf. Created observation-space-specification.md. Status → review.
+- **2026-01-22 (Review Fixes)**: Code review identified 9 issues (4 HIGH, 3 MEDIUM, 2 LOW) - all fixed. Key changes: replaced assertions with `__debug__` checks + ValueError exceptions, added range validation warnings, added 2 dataset boundary tests, improved performance test statistics, aligned docstring claims with test budget. All tests passing (42/42). Status → done.
 
 ## Dev Agent Record
 
@@ -419,17 +420,18 @@ No issues encountered during implementation. All tests passed on first run after
 - All validation tests passing
 
 **Key Findings:**
-1. Existing implementation was already correct and complete
-2. No bugs found in observation construction logic
-3. Added defensive assertions for production robustness
-4. Performance is excellent (~4ms, target was <10ms)
-5. Full test coverage with 22 new tests, all passing
+1. Existing implementation was fundamentally correct
+2. No critical bugs found in observation construction logic
+3. Added defensive validation checks (via __debug__) to catch potential future issues
+4. Performance is excellent (<10ms average, typically 3-5ms)
+5. Full test coverage with 24 new tests (after review fixes), all passing
 
 **Test Results:**
-- New observation tests: 22/22 passed ✅
-- Existing environment tests: 22/22 passed ✅
-- Total test suite: 44/44 passed ✅
+- New observation tests: 24/24 passed ✅ (added 2 boundary tests in review)
+- Existing environment tests: 18/18 passed ✅
+- Total test suite: 42/42 passed ✅
 - No regressions introduced
+- New validation warnings correctly detect edge cases in test output
 
 **Documentation Artifacts:**
 - Comprehensive specification: docs/observation-space-specification.md (287 lines)
@@ -445,8 +447,10 @@ No issues encountered during implementation. All tests passed on first run after
 ### File List
 
 **Modified Files:**
-- src/environment/solar_merchant_env.py - Enhanced docstrings and added validation assertions
-- docs/implementation/2-2-observation-construction.md - Marked all tasks complete
+- src/environment/solar_merchant_env.py - Enhanced docstrings and added validation
+- docs/implementation/2-2-observation-construction.md - Story tracking file
+- docs/implementation/sprint-status.yaml - Updated story status to 'review'
+- .claude/settings.local.json - IDE configuration updates
 
 **Created Files:**
 - tests/test_observation_construction.py - 22 comprehensive tests for observation space

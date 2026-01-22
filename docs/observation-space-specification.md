@@ -288,15 +288,19 @@ Uses `hasattr()` check and `.get()` with default 0.0 to safely handle missing da
 ## Performance Characteristics
 
 **Measured Performance:**
-- Average observation construction time: ~4ms per call
-- Budget: <10ms per call (well within 200ms/step for 5-second episode target)
+- Average observation construction time: <10ms per call (typically 3-5ms)
+- Budget: <10ms per call (well within 200ms/step for 5-second episode target per NFR2)
 - Performance verified by `test_observation_construction_performance`
 
-**Performance factors:**
-- `np.concatenate()` is efficient for this size (~84 elements)
-- Normalization factors pre-computed during `__init__()`
-- Window construction uses simple list iteration (24 iterations)
-- No heavy computation or external API calls
+**Performance Factors Contributing to Efficiency:**
+
+The observation construction achieves fast performance through several design choices:
+
+1. **Efficient concatenation**: `np.concatenate()` is highly optimized for small arrays (~84 elements)
+2. **Pre-computed normalization**: Normalization factors calculated once during `__init__()`, not per observation
+3. **Simple window construction**: Uses straightforward list iteration for 24-hour windows
+4. **No external dependencies**: No heavy computation, database queries, or API calls
+5. **Development-only validation**: Validation checks only run in debug mode (`__debug__`), zero overhead in production
 
 ## Testing Coverage
 
