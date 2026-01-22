@@ -19,7 +19,9 @@
       "mcp__filesystem__read_multiple_files",
       "mcp__filesystem__list_directory",
       "Bash(if exist nul del nul)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
     ]
   }
 }
