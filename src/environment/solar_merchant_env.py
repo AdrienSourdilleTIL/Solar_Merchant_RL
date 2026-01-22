@@ -35,24 +35,48 @@ class SolarMerchantEnv(gym.Env):
 
     The agent operates a solar farm + battery and trades on the day-ahead market.
 
-    State:
-        - Current hour (0-23)
-        - Battery SOC (0-1)
-        - Today's committed delivery schedule (24 values)
-        - Today's remaining hours actual vs committed
-        - PV forecast for next 24 hours
-        - Price forecast for next 24 hours (known day-ahead)
-        - Weather features (temperature, irradiance)
+    Observation Space (84 dimensions):
+        - Current hour (1): [0, 1] normalized
+        - Battery SOC (1): [0, 1] normalized by capacity
+        - Today's committed schedule (24): Hourly commitments normalized
+        - Cumulative imbalance today (1): Normalized by capacity
+        - PV forecast next 24h (24): Normalized by plant capacity
+        - Prices next 24h (24): Normalized by max abs price
+        - Current actual PV (1): [0, 1] normalized
+        - Temperature (1): Normalized
+        - Irradiance (1): Normalized
+        - Time features (6): hour_sin/cos, day_sin/cos, month_sin/cos
 
-    Actions:
-        At the commitment hour (11:00), agent provides:
-        - 24 hourly commitment values (energy to deliver, in MWh)
-
-        At other hours, agent provides:
-        - Battery charge/discharge decision for this hour
+    Action Space (25 dimensions):
+        - Commitment fractions (24): [0, 1] for each hour tomorrow
+          (Used only at commitment_hour=11)
+        - Battery action (1): [0, 1] where 0=discharge, 0.5=idle, 1=charge
 
     Reward:
         Revenue from sales - imbalance costs - battery degradation
+
+    Example:
+        >>> import gymnasium
+        >>> import src.environment  # Triggers registration
+        >>> from src.environment import load_environment
+        >>>
+        >>> # Load from CSV
+        >>> env = load_environment('data/processed/train.csv')
+        >>> obs, info = env.reset(seed=42)
+        >>> print(f"Observation shape: {obs.shape}")  # (84,)
+        >>>
+        >>> # Or use gymnasium.make()
+        >>> import pandas as pd
+        >>> data = pd.read_csv('data/processed/train.csv', parse_dates=['datetime'])
+        >>> env = gymnasium.make('SolarMerchant-v0', data=data)
+        >>>
+        >>> # Run episode
+        >>> obs, info = env.reset()
+        >>> for _ in range(24):
+        ...     action = env.action_space.sample()
+        ...     obs, reward, terminated, truncated, info = env.step(action)
+        ...     if terminated:
+        ...         break
     """
 
     metadata = {'render_modes': ['human']}
@@ -67,7 +91,7 @@ class SolarMerchantEnv(gym.Env):
         battery_degradation_cost: float = 0.01,  # EUR/MWh throughput
         commitment_hour: int = 11,  # Hour when day-ahead bids are due
         render_mode: Optional[str] = None
-    ):
+    ) -> None:
         """
         Initialize the environment.
 
@@ -84,6 +108,20 @@ class SolarMerchantEnv(gym.Env):
         """
         super().__init__()
 
+        # Validate required columns
+        required_columns = [
+            'datetime', 'hour', 'price_eur_mwh', 'pv_actual_mwh', 'pv_forecast_mwh',
+            'price_imbalance_short', 'price_imbalance_long',
+            'temperature_c', 'irradiance_direct',
+            'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'month_sin', 'month_cos'
+        ]
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            raise ValueError(
+                f"Missing required columns in data: {missing_columns}. "
+                f"Required columns: {required_columns}"
+            )
+
         self.data = data.reset_index(drop=True)
         self.plant_capacity_mw = plant_capacity_mw
         self.battery_capacity_mwh = battery_capacity_mwh
@@ -96,6 +134,7 @@ class SolarMerchantEnv(gym.Env):
 
         # Episode tracking
         self.current_idx = 0
+        self.episode_start_idx = 0  # Track episode start for 24-hour termination
         self.battery_soc = 0.5 * battery_capacity_mwh  # Start at 50% SOC
         self.committed_schedule = np.zeros(24)  # Today's hourly commitments
         self.episode_revenue = 0.0
@@ -136,7 +175,7 @@ class SolarMerchantEnv(gym.Env):
             dtype=np.float32
         )
 
-    def _compute_normalization_factors(self):
+    def _compute_normalization_factors(self) -> None:
         """Compute normalization factors from data."""
         self.norm_factors = {
             'price': self.data['price_eur_mwh'].abs().max() + 1e-8,
@@ -205,7 +244,11 @@ class SolarMerchantEnv(gym.Env):
         """Check if current hour is when day-ahead bids are due."""
         return self.data.iloc[self.current_idx]['hour'] == self.commitment_hour
 
-    def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        options: Optional[dict] = None
+    ) -> tuple[np.ndarray, dict]:
         """Reset environment to start of a new episode."""
         super().reset(seed=seed)
 
@@ -215,6 +258,23 @@ class SolarMerchantEnv(gym.Env):
 
         max_start = len(self.data) - 24 * 30  # Leave at least 30 days
         self.current_idx = np.random.randint(0, max(1, max_start))
+        self.episode_start_idx = self.current_idx  # Store episode start
+
+        # Validate episode will encounter commitment hour
+        # Check if commitment hour appears in next 24 hours
+        episode_hours = []
+        for i in range(24):
+            if self.current_idx + i < len(self.data):
+                episode_hours.append(int(self.data.iloc[self.current_idx + i]['hour']))
+
+        if self.commitment_hour not in episode_hours:
+            # Adjust start to ensure we hit commitment hour
+            # Find next occurrence of commitment hour
+            for i in range(len(self.data) - self.current_idx - 24):
+                if int(self.data.iloc[self.current_idx + i]['hour']) == self.commitment_hour:
+                    self.current_idx += i
+                    self.episode_start_idx = self.current_idx
+                    break
 
         # Reset state
         self.battery_soc = 0.5 * self.battery_capacity_mwh
@@ -226,7 +286,10 @@ class SolarMerchantEnv(gym.Env):
 
         return self._get_observation(), {}
 
-    def step(self, action: np.ndarray):
+    def step(
+        self,
+        action: np.ndarray
+    ) -> tuple[np.ndarray, float, bool, bool, dict]:
         """
         Execute one hour of operation.
 
@@ -253,9 +316,16 @@ class SolarMerchantEnv(gym.Env):
             # Interpret first 24 action values as commitment fractions
             commitment_fractions = np.clip(action[:24], 0, 1)
 
-            # Get forecasts for tomorrow (next 13-36 hours, i.e., tomorrow 00:00-23:00)
+            # Get forecasts for tomorrow (next 24 hours starting from midnight)
+            # Calculate hours until next midnight (00:00)
+            current_hour = int(row['hour'])
+            hours_until_midnight = (24 - current_hour) % 24
+            if hours_until_midnight == 0:
+                hours_until_midnight = 24  # We're at 00:00, tomorrow is 24h away
+
+            # Tomorrow's 24 hours start at hours_until_midnight from now
             tomorrow_forecasts = []
-            for i in range(13, 37):  # Hours 13-36 from now = tomorrow 00:00-23:00
+            for i in range(hours_until_midnight, hours_until_midnight + 24):
                 if self.current_idx + i < len(self.data):
                     tomorrow_forecasts.append(
                         self.data.iloc[self.current_idx + i]['pv_forecast_mwh']
@@ -282,7 +352,9 @@ class SolarMerchantEnv(gym.Env):
 
         # Battery charging (positive battery_target)
         if battery_target > 0:
-            # Charge from PV surplus (can't charge from grid in this simple model)
+            # DESIGN DECISION: Battery can only charge from PV surplus, not from grid
+            # This simplifies the model for V1 - future versions could add grid charging
+            # Impact: No pure arbitrage, battery is only for smoothing PV production
             charge_potential = min(
                 battery_target,
                 available_energy,  # Can only charge from available PV
@@ -320,13 +392,19 @@ class SolarMerchantEnv(gym.Env):
         self.episode_revenue += revenue
 
         # Imbalance settlement
+        # NOTE: Revenue already paid at day-ahead price for delivered amount
+        # Imbalance cost represents additional penalties/adjustments
         imbalance = delivered - committed
         if imbalance < 0:
-            # Short: under-delivered, pay penalty
+            # Short: under-delivered, pay penalty at short price
+            # Total cost = committed * price (already in revenue) + shortage * price_short
+            # We already got revenue for delivered, so we owe: shortage * price_short
             imbalance_cost = abs(imbalance) * price_short
         else:
-            # Long: over-delivered, receive less (opportunity cost)
-            # Actually receive long price instead of DA price
+            # Long: over-delivered, receive long price instead of DA price for excess
+            # Total revenue = committed * price + excess * price_long (not price)
+            # Since we already counted delivered * price in revenue,
+            # we need to subtract the excess that should have been at long price
             imbalance_cost = imbalance * (price - price_long)
 
         self.episode_imbalance_cost += imbalance_cost
@@ -358,13 +436,14 @@ class SolarMerchantEnv(gym.Env):
         # Advance time
         self.current_idx += 1
 
-        # Check termination
-        terminated = self.current_idx >= len(self.data) - 1
-        truncated = False
+        # Check termination: Episode ends after 24 hours OR at data boundary
+        episode_hours = self.current_idx - self.episode_start_idx
+        terminated = episode_hours >= 24
+        truncated = self.current_idx >= len(self.data) - 1
 
         return self._get_observation(), reward, terminated, truncated, info
 
-    def render(self):
+    def render(self) -> None:
         """Render current state."""
         if self.render_mode == 'human':
             row = self.data.iloc[self.current_idx]

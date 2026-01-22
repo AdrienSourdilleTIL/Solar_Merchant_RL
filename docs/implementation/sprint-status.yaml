@@ -41,16 +41,16 @@ story_location: docs/implementation
 
 development_status:
   # Epic 1: Data Foundation
-  epic-1: in-progress
-  1-1-load-and-validate-raw-data: review
-  1-2-clean-and-align-datasets: backlog
-  1-3-scale-pv-and-generate-forecasts: backlog
-  1-4-derive-prices-and-output-dataset: backlog
+  epic-1: done
+  1-1-load-and-validate-raw-data: done
+  1-2-clean-and-align-datasets: done
+  1-3-scale-pv-and-generate-forecasts: done
+  1-4-derive-prices-and-output-dataset: done
   epic-1-retrospective: optional
 
   # Epic 2: Trading Environment
-  epic-2: backlog
-  2-1-environment-structure-and-registration: backlog
+  epic-2: in-progress
+  2-1-environment-structure-and-registration: done
   2-2-observation-construction: backlog
   2-3-battery-mechanics: backlog
   2-4-market-settlement-logic: backlog

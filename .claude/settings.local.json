@@ -7,7 +7,19 @@
       "Bash(git clone:*)",
       "Skill(bmad:bmm:workflows:sprint-planning)",
       "Skill(bmad:bmm:workflows:sprint-planning:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Skill(bmad:bmm:workflows:dev-story)",
+      "Skill(bmad:bmm:workflows:dev-story:*)",
+      "Bash(dir:*)",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__list_allowed_directories",
+      "mcp__filesystem__directory_tree",
+      "Skill(bmad:bmm:workflows:create-story)",
+      "Skill(bmad:bmm:workflows:create-story:*)",
+      "mcp__filesystem__read_multiple_files",
+      "mcp__filesystem__list_directory",
+      "Bash(if exist nul del nul)",
+      "Bash(git add:*)"
     ]
   }
 }
