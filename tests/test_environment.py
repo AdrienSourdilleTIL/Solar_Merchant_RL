@@ -218,7 +218,7 @@ class TestDataLoading:
 
 
 class TestEpisodeTermination:
-    """Test episode termination after exactly 24 hours."""
+    """Test episode termination after exactly 48 hours."""
 
     @pytest.fixture
     def env_with_data(self):
@@ -243,8 +243,8 @@ class TestEpisodeTermination:
         })
         return SolarMerchantEnv(data)
 
-    def test_episode_terminates_after_24_hours(self, env_with_data):
-        """Verify episode terminates after exactly 24 hours."""
+    def test_episode_terminates_after_48_hours(self, env_with_data):
+        """Verify episode terminates after exactly 48 hours."""
         env = env_with_data
         obs, info = env.reset(seed=42)
 
@@ -252,13 +252,13 @@ class TestEpisodeTermination:
         terminated = False
         truncated = False
 
-        while not terminated and not truncated and step_count < 30:
+        while not terminated and not truncated and step_count < 60:
             action = env.action_space.sample()
             obs, reward, terminated, truncated, info = env.step(action)
             step_count += 1
 
         assert terminated or truncated, "Episode should terminate"
-        assert step_count == 24, f"Episode should last exactly 24 hours, but lasted {step_count}"
+        assert step_count == 48, f"Episode should last exactly 48 hours, but lasted {step_count}"
 
     def test_episode_tracks_start_index(self, env_with_data):
         """Verify episode correctly tracks start index."""
@@ -269,12 +269,12 @@ class TestEpisodeTermination:
         assert start_idx == env.current_idx - 1 or start_idx == env.current_idx
 
     def test_commitment_hour_occurs_in_episode(self, env_with_data):
-        """Verify commitment hour appears within 24-hour episode."""
+        """Verify commitment hour appears within 48-hour episode."""
         env = env_with_data
         obs, info = env.reset(seed=42)
 
         commitment_seen = False
-        for _ in range(24):
+        for _ in range(48):
             if env._is_commitment_hour():
                 commitment_seen = True
             action = env.action_space.sample()

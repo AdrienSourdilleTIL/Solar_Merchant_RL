@@ -134,9 +134,16 @@ class SolarMerchantEnv(gym.Env):
 
         # Episode tracking
         self.current_idx = 0
-        self.episode_start_idx = 0  # Track episode start for 24-hour termination
+        self.episode_start_idx = 0  # Track episode start for termination
         self.battery_soc = 0.5 * battery_capacity_mwh  # Start at 50% SOC
-        self.committed_schedule = np.zeros(24)  # Today's hourly commitments
+
+        # Commitment tracking: separate today vs tomorrow
+        # CRITICAL: Commitments made at hour 11 are for the NEXT day
+        # We need to track both today's commitments (being fulfilled now)
+        # and tomorrow's commitments (made at commitment hour for next day)
+        self.todays_commitments = np.zeros(24)   # Currently being delivered against
+        self.tomorrows_commitments = np.zeros(24)  # Will become today after midnight
+
         self.episode_revenue = 0.0
         self.episode_imbalance_cost = 0.0
         self.episode_degradation_cost = 0.0
@@ -279,7 +286,7 @@ class SolarMerchantEnv(gym.Env):
         cumulative_imbalance = 0.0
         for h in range(int(hour)):
             if hasattr(self, 'hourly_delivered'):
-                committed = self.committed_schedule[h]
+                committed = self.todays_commitments[h]
                 delivered = self.hourly_delivered.get(h, 0.0)
                 cumulative_imbalance += delivered - committed
 
@@ -288,8 +295,8 @@ class SolarMerchantEnv(gym.Env):
             [hour / 24.0],
             # Battery SOC (normalized)
             [self.battery_soc / self.battery_capacity_mwh],
-            # Committed schedule (normalized by capacity)
-            self.committed_schedule / self.plant_capacity_mw,
+            # Today's commitments (normalized by capacity)
+            self.todays_commitments / self.plant_capacity_mw,
             # Cumulative imbalance (normalized)
             [cumulative_imbalance / self.plant_capacity_mw],
             # PV forecast (normalized)
@@ -338,28 +345,34 @@ class SolarMerchantEnv(gym.Env):
         seed: Optional[int] = None,
         options: Optional[dict] = None
     ) -> tuple[np.ndarray, dict]:
-        """Reset environment to start of a new episode."""
+        """Reset environment to start of a new episode.
+
+        Episodes are now 48 hours to ensure the agent sees consequences of
+        commitments made during the episode. This fixes the credit assignment
+        problem where commitments made at hour 11 for tomorrow wouldn't be
+        evaluated before episode termination.
+        """
         super().reset(seed=seed)
 
         # Start at a random position (but not too close to end)
         if seed is not None:
             np.random.seed(seed)
 
-        max_start = len(self.data) - 24 * 30  # Leave at least 30 days
+        max_start = len(self.data) - 48 * 30  # Leave at least 30 days (48h episodes)
         self.current_idx = np.random.randint(0, max(1, max_start))
         self.episode_start_idx = self.current_idx  # Store episode start
 
         # Validate episode will encounter commitment hour
-        # Check if commitment hour appears in next 24 hours
+        # Check if commitment hour appears in next 48 hours
         episode_hours = []
-        for i in range(24):
+        for i in range(48):
             if self.current_idx + i < len(self.data):
                 episode_hours.append(int(self.data.iloc[self.current_idx + i]['hour']))
 
         if self.commitment_hour not in episode_hours:
             # Adjust start to ensure we hit commitment hour
             # Find next occurrence of commitment hour
-            for i in range(len(self.data) - self.current_idx - 24):
+            for i in range(len(self.data) - self.current_idx - 48):
                 if int(self.data.iloc[self.current_idx + i]['hour']) == self.commitment_hour:
                     self.current_idx += i
                     self.episode_start_idx = self.current_idx
@@ -367,7 +380,8 @@ class SolarMerchantEnv(gym.Env):
 
         # Reset state
         self.battery_soc = 0.5 * self.battery_capacity_mwh
-        self.committed_schedule = np.zeros(24)
+        self.todays_commitments = np.zeros(24)
+        self.tomorrows_commitments = np.zeros(24)
         self.hourly_delivered = {}
         self.episode_revenue = 0.0
         self.episode_imbalance_cost = 0.0
@@ -426,10 +440,15 @@ class SolarMerchantEnv(gym.Env):
             # Commitment = fraction * (forecast + battery discharge potential)
             # Agent decides how aggressively to commit based on forecast
             max_commitment = tomorrow_forecasts + self.battery_power_mw
-            self.committed_schedule = commitment_fractions * max_commitment
-            self.hourly_delivered = {}  # Reset for new day
+            self.tomorrows_commitments = commitment_fractions * max_commitment
 
-            info['new_commitment'] = self.committed_schedule.copy()
+            info['new_commitment'] = self.tomorrows_commitments.copy()
+
+        # Handle midnight transition: tomorrow becomes today
+        if hour == 0:
+            self.todays_commitments = self.tomorrows_commitments.copy()
+            self.tomorrows_commitments = np.zeros(24)
+            self.hourly_delivered = {}  # Reset delivered tracking for new day
 
         # Battery decision
         # action[24] in [0, 1]: 0 = full discharge, 0.5 = idle, 1 = full charge
@@ -472,7 +491,8 @@ class SolarMerchantEnv(gym.Env):
         self.battery_soc = np.clip(self.battery_soc, 0, self.battery_capacity_mwh)
 
         # Determine delivery vs commitment
-        committed = self.committed_schedule[hour]
+        # Use todays_commitments indexed by hour-of-day
+        committed = self.todays_commitments[hour]
         delivered = available_energy  # We deliver whatever we have
 
         # Calculate revenue and imbalance
@@ -525,9 +545,10 @@ class SolarMerchantEnv(gym.Env):
         # Advance time
         self.current_idx += 1
 
-        # Check termination: Episode ends after 24 hours OR at data boundary
+        # Check termination: Episode ends after 48 hours OR at data boundary
+        # 48h ensures agent sees consequences of commitments made during episode
         episode_hours = self.current_idx - self.episode_start_idx
-        terminated = episode_hours >= 24
+        terminated = episode_hours >= 48
         truncated = self.current_idx >= len(self.data) - 1
 
         return self._get_observation(), reward, terminated, truncated, info

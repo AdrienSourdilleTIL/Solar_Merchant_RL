@@ -67,6 +67,7 @@ tensorboard --logdir outputs/tensorboard
 **Core Decision Problem:**
 - At 11:00 daily: commit how much energy to deliver each hour tomorrow
 - Every hour: decide battery charge/discharge to meet commitments
+- **Episodes are 48 hours** to ensure agent sees consequences of commitments (credit assignment fix)
 
 **Action Space** (25-dimensional continuous):
 - `action[0:24]`: Commitment fractions for each hour (0-1 of max possible)
@@ -109,6 +110,29 @@ Simplified model of real balancing market:
 - **Long** (over-delivered): Receive 0.6× day-ahead price
 
 This creates asymmetric risk that the agent must learn to manage.
+
+### Key Design Decisions & Constraints (V1)
+
+**48-Hour Episodes:**
+- Episodes span 48 hours to fix credit assignment problem
+- Commitments made at hour 11 are for the next day (hours 13-36 of episode)
+- Agent sees imbalance costs from those commitments before episode ends
+- Previous 24h design was fundamentally broken - agent never learned from its commitments
+
+**Commitment Tracking:**
+- Separate `todays_commitments` and `tomorrows_commitments` arrays
+- Prevents indexing bugs when episodes span midnight
+- Tomorrow becomes today at midnight transition
+
+**Battery Constraints:**
+- Battery can ONLY charge from PV surplus, NOT from grid
+- This eliminates price arbitrage strategies (buy low, sell high)
+- Battery is purely for production smoothing and imbalance mitigation
+- Future versions could add grid charging for arbitrage
+
+**Action Space Inefficiency:**
+- 24/25 action dimensions ignored 23/24 hours (only used at commitment hour)
+- Acceptable for V1, could add action masking later to improve sample efficiency
 
 ## Data Pipeline
 

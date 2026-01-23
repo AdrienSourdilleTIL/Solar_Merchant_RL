@@ -369,6 +369,18 @@ def _get_observation(self) -> np.ndarray:
 
 - **2026-01-22 (Initial)**: Story 2-2 implemented - Validated observation construction (84 dims), added comprehensive test suite (22 tests), enhanced docstrings with detailed documentation, added defensive validation for shape/NaN/Inf. Created observation-space-specification.md. Status → review.
 - **2026-01-22 (Review Fixes)**: Code review identified 9 issues (4 HIGH, 3 MEDIUM, 2 LOW) - all fixed. Key changes: replaced assertions with `__debug__` checks + ValueError exceptions, added range validation warnings, added 2 dataset boundary tests, improved performance test statistics, aligned docstring claims with test budget. All tests passing (42/42). Status → done.
+- **2026-01-22 (Critical Architectural Fixes)**: Post-review deep analysis revealed 2 CRITICAL design flaws:
+  1. **Episode/Commitment Mismatch**: 24h episodes ended before agent saw consequences of commitments made during episode → broken credit assignment
+  2. **Commitment Indexing Bug**: Single `committed_schedule` array couldn't track today vs tomorrow → wrong imbalance calculations after midnight
+
+  **Fixes Applied:**
+  - Extended episodes to 48 hours (ensures agent sees tomorrow's imbalances)
+  - Split into `todays_commitments` + `tomorrows_commitments` with midnight transition logic
+  - Updated all tests for new 48h episode length
+  - Updated CLAUDE.md and architecture docs with design constraints
+  - All tests passing (46/46), no regressions
+
+  **Impact:** These were fundamental architectural flaws that would have completely broken RL training. Agent couldn't learn effective commitment strategies without seeing their consequences.
 
 ## Dev Agent Record
 
