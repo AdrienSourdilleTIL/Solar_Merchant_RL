@@ -52,7 +52,7 @@ development_status:
   epic-2: in-progress
   2-1-environment-structure-and-registration: done
   2-2-observation-construction: done
-  2-3-battery-mechanics: backlog
+  2-3-battery-mechanics: review
   2-4-market-settlement-logic: backlog
   2-5-episode-flow-and-reset: backlog
   epic-2-retrospective: optional
