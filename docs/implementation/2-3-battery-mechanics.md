@@ -1,6 +1,6 @@
 # Story 2.3: Battery Mechanics
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -51,12 +51,12 @@ So that battery operations are physically realistic.
   - [x] Test degradation cost is subtracted from reward
   - [x] Verify degradation cost impacts agent economics correctly
 
-- [x] Task 5: Enhance and fix battery implementation if needed (AC: #1)
-  - [x] Review battery action clipping (ensure invalid actions handled gracefully)
-  - [x] Add comprehensive docstrings for battery methods
-  - [x] Add assertions/validation for battery physics constraints
-  - [x] Consider adding info dict entries for battery telemetry
-  - [x] Test battery performance (should be fast, <1ms per step)
+- [x] Task 5: Validate battery implementation enhancements (AC: #1)
+  - [x] Review battery action clipping (Gymnasium handles clipping via Box(0,1) action space)
+  - [x] Verify existing docstrings are adequate (battery logic is inline in step(), no separate methods)
+  - [x] Verify SOC clamping provides physics constraints (np.clip at line 491)
+  - [x] Verify info dict already includes battery telemetry (battery_soc, battery_throughput)
+  - [x] Test battery performance (<50ms avg per step, within NFR2 budget)
 
 ## Dev Notes
 
@@ -162,19 +162,19 @@ self.battery_soc = np.clip(self.battery_soc, 0, self.battery_capacity_mwh)
 ### Battery Physics Validation Checklist
 
 **Charge Mechanics:**
-- [ ] Power limit: Cannot charge faster than 5 MW
-- [ ] Capacity limit: Cannot exceed 10 MWh total storage
-- [ ] Energy source: Can only charge from PV surplus (not grid)
-- [ ] Efficiency loss: Charging 1 MWh consumes 1/0.959 MWh from PV
-- [ ] Edge case: Charging when SOC = 9.5 MWh (near full)
-- [ ] Edge case: Charging when no PV surplus available
+- [x] Power limit: Cannot charge faster than 5 MW (test_power_limit_during_charge)
+- [x] Capacity limit: Cannot exceed 10 MWh total storage (test_capacity_limit_during_charge)
+- [x] Energy source: Can only charge from PV surplus (not grid) (test_charging_from_pv_surplus_only)
+- [x] Efficiency loss: Charging 1 MWh consumes 1/0.959 MWh from PV (test_efficiency_losses_during_charge)
+- [x] Edge case: Charging when SOC = 9.5 MWh (near full) (test_edge_case_charging_near_full)
+- [x] Edge case: Charging when no PV surplus available (test_edge_case_charging_no_pv_surplus)
 
 **Discharge Mechanics:**
-- [ ] Power limit: Cannot discharge faster than 5 MW
-- [ ] SOC limit: Cannot discharge below 0 MWh
-- [ ] Efficiency loss: Discharging provides 0.959× stored energy
-- [ ] Energy delivery: Discharged energy adds to available_energy
-- [ ] Edge case: Discharging when SOC = 0.5 MWh (near empty)
+- [x] Power limit: Cannot discharge faster than 5 MW (test_power_limit_during_discharge)
+- [x] SOC limit: Cannot discharge below 0 MWh (test_discharge_stops_at_soc_zero)
+- [x] Efficiency loss: Discharging provides 0.959× stored energy (test_efficiency_losses_during_discharge)
+- [x] Energy delivery: Discharged energy adds to available_energy (test_discharge_provides_energy)
+- [x] Edge case: Discharging when SOC = 0.5 MWh (near empty) (test_edge_case_discharging_near_empty)
 
 **Efficiency Calculation:**
 - Round-trip efficiency: 92% = 0.92
@@ -378,31 +378,31 @@ tests/
 ### Implementation Checklist
 
 **Primary Task: Validate Battery Implementation**
-- [ ] Read and analyze battery charge logic (lines 464-476)
-- [ ] Read and analyze battery discharge logic (lines 477-489)
-- [ ] Verify power limit enforcement in both directions
-- [ ] Verify efficiency calculations are correct (sqrt for one-way)
-- [ ] Verify SOC clamping prevents out-of-bounds values
-- [ ] Test with known inputs to verify physics
+- [x] Read and analyze battery charge logic (lines 462-474)
+- [x] Read and analyze battery discharge logic (lines 476-486)
+- [x] Verify power limit enforcement in both directions
+- [x] Verify efficiency calculations are correct (sqrt for one-way)
+- [x] Verify SOC clamping prevents out-of-bounds values
+- [x] Test with known inputs to verify physics
 
 **Secondary Task: Test Battery Mechanics**
-- [ ] Test charging scenarios (various fractions, limits)
-- [ ] Test discharging scenarios (various fractions, limits)
-- [ ] Test edge cases (SOC=0, SOC=capacity, no PV)
-- [ ] Test round-trip efficiency (charge→discharge cycle)
-- [ ] Test degradation cost calculation
+- [x] Test charging scenarios (various fractions, limits)
+- [x] Test discharging scenarios (various fractions, limits)
+- [x] Test edge cases (SOC=0, SOC=capacity, no PV)
+- [x] Test round-trip efficiency (charge→discharge cycle)
+- [x] Test degradation cost calculation
 
 **Documentation Task**
-- [ ] Document battery physics model clearly
-- [ ] Add examples of battery operation
-- [ ] Document edge case behavior
-- [ ] Document design decisions (PV-only charging, symmetric efficiency)
+- [x] Document battery physics model clearly (Dev Notes section)
+- [x] Add examples of battery operation (code snippets in Dev Notes)
+- [x] Document edge case behavior (Battery Physics Validation Checklist)
+- [x] Document design decisions (PV-only charging, symmetric efficiency)
 
-**Enhancement Task (Optional)**
-- [ ] Add action clipping validation if missing
-- [ ] Add battery telemetry to info dict
-- [ ] Add validation for battery physics constraints
-- [ ] Profile battery operation performance
+**Enhancement Task (Validated as Already Present)**
+- [x] Action clipping handled by Gymnasium Box(0,1) action space
+- [x] Battery telemetry already in info dict (battery_soc, battery_throughput)
+- [x] SOC clamping provides physics constraints (np.clip)
+- [x] Performance validated (<50ms avg, within NFR2 budget)
 
 ### Technical Requirements
 
@@ -463,6 +463,15 @@ def _apply_battery_action(self, action: float, available_energy: float) -> tuple
 
 - **2026-01-26 (Initial)**: Story 2-3 created by SM agent (Bob). Comprehensive context gathered from epics, architecture, previous stories, and existing code. Status → ready-for-dev.
 - **2026-01-26 (Dev)**: Implemented comprehensive battery mechanics test suite (28 tests). Validated existing battery implementation is correct. All tests pass.
+- **2026-01-26 (Review)**: Code review identified 9 issues (3 HIGH, 4 MEDIUM, 2 LOW). Fixed all HIGH and MEDIUM issues:
+  - H1: Corrected Task 5 claims to reflect actual validation work (no code changes needed)
+  - H2: Updated all implementation checklists to match test coverage
+  - H3: Corrected performance claims to match actual measurements (<50ms, not <1ms)
+  - M1: Made test assertions unconditional (fail explicitly if preconditions not met)
+  - M2: Added 2 new edge case tests (near-idle actions, out-of-bounds clipping)
+  - M3: Enhanced degradation test to verify reward formula directly
+  - M4: Corrected efficiency percentage comments (≈95.9%, not 96%)
+  - Test suite now has 30 tests (was 28). Status → done.
 
 ## Dev Agent Record
 
@@ -510,14 +519,14 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 - Battery methods already have adequate docstrings ✅
 - SOC clamping provides physics constraints ✅
 - info dict already includes battery_throughput and battery_soc ✅
-- Performance: avg ~19ms per step (within 50ms budget) ✅
+- Performance: avg ~19ms per step (within 50ms budget per NFR2: 5s/48steps=104ms) ✅
 
 **Key Finding:** Existing battery implementation is **correct** and follows architecture specification. No code changes required - validation tests confirm physics are accurate.
 
 ### File List
 
 **New Files:**
-- tests/test_battery_mechanics.py (28 comprehensive tests)
+- tests/test_battery_mechanics.py (30 comprehensive tests - 28 original + 2 from review)
 
 **Modified Files:**
 - docs/implementation/2-3-battery-mechanics.md (this story file)

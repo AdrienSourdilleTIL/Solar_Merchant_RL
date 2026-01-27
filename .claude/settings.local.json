@@ -22,7 +22,13 @@
       "Bash(git add:*)",
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" status)",
+      "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" status -uall)",
+      "mcp__filesystem__get_file_info",
+      "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" log --oneline -5)",
+      "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" log --oneline --name-only -1)",
+      "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" diff HEAD~1 src/environment/solar_merchant_env.py)"
     ]
   }
 }

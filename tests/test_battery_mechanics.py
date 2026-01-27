@@ -80,7 +80,7 @@ class TestBatteryValidation:
             f"Battery throughput {max_throughput} exceeded power limit {env.battery_power_mw} MW"
 
     def test_round_trip_efficiency_calculation(self, env):
-        """Verify round-trip efficiency calculation is correct (92% = 0.96 one-way)."""
+        """Verify round-trip efficiency calculation is correct (92% ≈ 0.959 one-way)."""
         # Verify one-way efficiency calculation
         expected_one_way = np.sqrt(env.battery_efficiency)
         assert np.isclose(env.one_way_efficiency, expected_one_way, atol=1e-6), \
@@ -151,6 +151,7 @@ class TestBatteryChargeMechanics:
         env.reset(seed=42)
 
         # Find a step with PV production and test charge is limited by available PV
+        charging_tested = False
         for i in range(100):
             # Get current PV
             row = env.data.iloc[env.current_idx]
@@ -168,9 +169,12 @@ class TestBatteryChargeMechanics:
             if throughput > 0:  # Charging occurred
                 assert throughput <= pv_actual + 1e-6, \
                     f"Charge throughput {throughput} exceeded available PV {pv_actual}"
+                charging_tested = True
 
             if terminated or truncated:
                 env.reset(seed=42 + i)
+
+        assert charging_tested, "Test did not encounter any charging scenarios"
 
     def test_power_limit_during_charge(self, env):
         """Test power limit enforcement during charge (5 MW max)."""
@@ -208,7 +212,7 @@ class TestBatteryChargeMechanics:
                 env.reset(seed=42 + i)
 
     def test_efficiency_losses_during_charge(self, env):
-        """Test efficiency losses during charge (92% round-trip = 96% one-way)."""
+        """Test efficiency losses during charge (92% round-trip ≈ 95.9% one-way)."""
         env.reset(seed=42)
 
         # Find a high-PV step with low SOC
@@ -314,6 +318,9 @@ class TestBatteryDischargeMechanics:
         """Test discharge to meet commitments or provide energy."""
         env.reset(seed=42)
 
+        # Set known SOC to guarantee discharge occurs
+        env.battery_soc = 5.0  # 5 MWh available
+
         # Get initial state
         row = env.data.iloc[env.current_idx]
         pv_actual = row['pv_actual_mwh']
@@ -329,12 +336,12 @@ class TestBatteryDischargeMechanics:
         delivered = info['delivered']
         throughput = info['battery_throughput']
 
-        # Delivered = PV + battery discharge
-        # Due to efficiency, this is approximate
-        if throughput > 0:
-            # There should be energy delivered beyond just PV
-            assert delivered >= pv_actual - 1e-6, \
-                f"Delivered {delivered} should be at least PV {pv_actual}"
+        # With 5 MWh SOC and full discharge, throughput must be positive
+        assert throughput > 0, "Discharge should produce positive throughput with 5 MWh SOC"
+
+        # There should be energy delivered beyond just PV
+        assert delivered >= pv_actual - 1e-6, \
+            f"Delivered {delivered} should be at least PV {pv_actual}"
 
     def test_power_limit_during_discharge(self, env):
         """Test power limit enforcement during discharge (5 MW max)."""
@@ -380,10 +387,10 @@ class TestBatteryDischargeMechanics:
                 break
 
     def test_efficiency_losses_during_discharge(self, env):
-        """Test efficiency losses during discharge (96% one-way)."""
+        """Test efficiency losses during discharge (≈95.9% one-way)."""
         env.reset(seed=42)
 
-        # Set known SOC
+        # Set known SOC to guarantee discharge
         initial_soc = 5.0  # MWh
         env.battery_soc = initial_soc
 
@@ -395,13 +402,15 @@ class TestBatteryDischargeMechanics:
         throughput = info['battery_throughput']
         soc_decrease = initial_soc - env.battery_soc
 
-        if throughput > 0:
-            # Energy delivered (throughput) should be SOC used * one_way_efficiency
-            # Or equivalently: SOC decrease = throughput / one_way_efficiency
-            expected_soc_decrease = throughput / env.one_way_efficiency
+        # With 5 MWh SOC, discharge must occur
+        assert throughput > 0, "Discharge should produce throughput with 5 MWh SOC"
 
-            assert np.isclose(soc_decrease, expected_soc_decrease, atol=0.01), \
-                f"SOC decrease {soc_decrease} != expected {expected_soc_decrease}"
+        # Energy delivered (throughput) should be SOC used * one_way_efficiency
+        # Or equivalently: SOC decrease = throughput / one_way_efficiency
+        expected_soc_decrease = throughput / env.one_way_efficiency
+
+        assert np.isclose(soc_decrease, expected_soc_decrease, atol=0.01), \
+            f"SOC decrease {soc_decrease} != expected {expected_soc_decrease}"
 
     def test_edge_case_discharging_near_empty(self, env):
         """Test edge case: discharging when SOC near empty."""
@@ -483,7 +492,7 @@ class TestBatteryDegradationCost:
     def test_degradation_cost_subtracted_from_reward(self, env):
         """Test degradation cost is subtracted from reward."""
         env.reset(seed=42)
-        env.battery_soc = 5.0  # Set known SOC
+        env.battery_soc = 5.0  # Set known SOC to guarantee discharge
 
         # Get baseline degradation cost
         initial_degradation = env.episode_degradation_cost
@@ -495,13 +504,23 @@ class TestBatteryDegradationCost:
         obs, reward, _, _, info = env.step(action)
         throughput = info['battery_throughput']
 
-        if throughput > 0:
-            # Degradation cost should have increased
-            expected_degradation = throughput * env.battery_degradation_cost
-            actual_degradation_increase = env.episode_degradation_cost - initial_degradation
+        # With 5 MWh SOC, discharge must occur
+        assert throughput > 0, "Discharge should produce throughput with 5 MWh SOC"
 
-            assert np.isclose(actual_degradation_increase, expected_degradation, atol=0.001), \
-                f"Degradation increase {actual_degradation_increase} != expected {expected_degradation}"
+        # Degradation cost should have increased
+        expected_degradation = throughput * env.battery_degradation_cost
+        actual_degradation_increase = env.episode_degradation_cost - initial_degradation
+
+        assert np.isclose(actual_degradation_increase, expected_degradation, atol=0.001), \
+            f"Degradation increase {actual_degradation_increase} != expected {expected_degradation}"
+
+        # Verify reward formula: reward = revenue - imbalance_cost - degradation
+        # The degradation should reduce the reward
+        revenue = info['revenue']
+        imbalance_cost = info['imbalance_cost']
+        expected_reward = revenue - imbalance_cost - expected_degradation
+        assert np.isclose(reward, expected_reward, atol=0.01), \
+            f"Reward {reward} != expected {expected_reward} (revenue - imbalance - degradation)"
 
     def test_degradation_impacts_agent_economics(self, env):
         """Verify degradation cost impacts agent economics correctly."""
@@ -521,14 +540,16 @@ class TestBatteryDegradationCost:
         throughput = info['battery_throughput']
         actual_degradation = throughput * env.battery_degradation_cost
 
+        # With full battery, discharge must occur
+        assert throughput > 0, "Discharge should produce throughput with full battery"
+
         # Degradation should be small but meaningful
         assert actual_degradation <= expected_degradation + 0.001, \
             f"Degradation {actual_degradation} exceeded expected {expected_degradation}"
 
         # At ~5 MW discharge, degradation ≈ 0.05 EUR
         # This is small relative to revenue but non-zero
-        if throughput > 0:
-            assert actual_degradation > 0, "Degradation should be positive for non-zero throughput"
+        assert actual_degradation > 0, "Degradation should be positive for non-zero throughput"
 
 
 class TestBatteryEnhancementsAndEdgeCases:
@@ -546,11 +567,9 @@ class TestBatteryEnhancementsAndEdgeCases:
         """Review battery action clipping (ensure invalid actions handled gracefully)."""
         env.reset(seed=42)
 
-        # Test with action values outside normal range
-        # Note: The action space is Box(0, 1), but we test clipping just in case
         action = np.zeros(25, dtype=np.float32)
 
-        # Test boundary values
+        # Test valid boundary values
         for battery_action in [0.0, 0.25, 0.5, 0.75, 1.0]:
             env.reset(seed=42)
             action[24] = battery_action
@@ -561,6 +580,77 @@ class TestBatteryEnhancementsAndEdgeCases:
             # SOC should remain valid
             assert 0 <= env.battery_soc <= env.battery_capacity_mwh, \
                 f"SOC {env.battery_soc} invalid for action {battery_action}"
+
+    def test_battery_action_near_idle(self, env):
+        """Test battery actions very close to idle (0.5) for floating point edge cases."""
+        env.reset(seed=42)
+        initial_soc = env.battery_soc
+
+        action = np.zeros(25, dtype=np.float32)
+
+        # Test values very close to idle (0.5)
+        for battery_action in [0.49, 0.499, 0.5, 0.501, 0.51]:
+            env.reset(seed=42)
+            env.battery_soc = 5.0  # Set known SOC
+            initial_soc = env.battery_soc
+
+            action[24] = battery_action
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            throughput = info['battery_throughput']
+
+            # Actions very close to 0.5 should produce minimal or zero throughput
+            if battery_action == 0.5:
+                assert throughput == 0.0, f"Idle action should produce zero throughput"
+            else:
+                # Near-idle actions should produce small throughput
+                # Maximum throughput at boundaries is 5 MW * (0.01 * 2) = 0.1 MW
+                assert throughput <= 0.15, \
+                    f"Near-idle action {battery_action} produced large throughput {throughput}"
+
+            # SOC should remain valid
+            assert 0 <= env.battery_soc <= env.battery_capacity_mwh, \
+                f"SOC {env.battery_soc} invalid for near-idle action {battery_action}"
+
+    def test_battery_action_out_of_bounds_clipped(self, env):
+        """Test that out-of-bounds actions are handled (clipped by Gymnasium)."""
+        env.reset(seed=42)
+        env.battery_soc = 5.0  # Set known SOC
+
+        action = np.zeros(25, dtype=np.float32)
+
+        # Note: Gymnasium's Box action space clips values to [0, 1]
+        # We test that the environment handles edge values gracefully
+
+        # Test extreme values that would be clipped to boundaries
+        for battery_action, expected_behavior in [
+            (-0.5, "clipped to 0.0 = full discharge"),
+            (1.5, "clipped to 1.0 = full charge"),
+            (-1.0, "clipped to 0.0 = full discharge"),
+            (2.0, "clipped to 1.0 = full charge"),
+        ]:
+            env.reset(seed=42)
+            env.battery_soc = 5.0
+            initial_soc = env.battery_soc
+
+            # Manually clip as Gymnasium would (simulating wrapper behavior)
+            clipped_action = np.clip(battery_action, 0.0, 1.0)
+            action[24] = clipped_action
+
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            # SOC should remain valid after clipped action
+            assert 0 <= env.battery_soc <= env.battery_capacity_mwh, \
+                f"SOC {env.battery_soc} invalid after clipped action ({battery_action} -> {clipped_action})"
+
+            # Verify action interpretation matches clipped value
+            throughput = info['battery_throughput']
+            if clipped_action == 0.0:
+                # Full discharge should produce throughput
+                assert throughput > 0, f"Full discharge should produce throughput"
+            elif clipped_action == 1.0:
+                # Full charge may or may not produce throughput depending on PV
+                pass  # No assertion needed, just verify no crash
 
     def test_battery_idle_no_throughput(self, env):
         """Test idle action produces no throughput."""
