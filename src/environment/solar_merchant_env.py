@@ -351,6 +351,16 @@ class SolarMerchantEnv(gym.Env):
         commitments made during the episode. This fixes the credit assignment
         problem where commitments made at hour 11 for tomorrow wouldn't be
         evaluated before episode termination.
+
+        Args:
+            seed: Random seed for reproducibility
+            options: Optional configuration dict with:
+                - initial_soc: Initial battery state of charge as fraction [0, 1].
+                               Default is 0.5 (50% capacity).
+
+        Returns:
+            observation: Initial observation array (84,)
+            info: Empty info dict
         """
         super().reset(seed=seed)
 
@@ -378,8 +388,13 @@ class SolarMerchantEnv(gym.Env):
                     self.episode_start_idx = self.current_idx
                     break
 
-        # Reset state
-        self.battery_soc = 0.5 * self.battery_capacity_mwh
+        # Reset state with configurable initial SOC (default 0.5)
+        initial_soc_fraction = 0.5
+        if options is not None and 'initial_soc' in options:
+            initial_soc_fraction = float(options['initial_soc'])
+            # Clamp to valid range [0, 1]
+            initial_soc_fraction = np.clip(initial_soc_fraction, 0.0, 1.0)
+        self.battery_soc = initial_soc_fraction * self.battery_capacity_mwh
         self.todays_commitments = np.zeros(24)
         self.tomorrows_commitments = np.zeros(24)
         self.hourly_delivered = {}

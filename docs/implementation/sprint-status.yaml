@@ -49,12 +49,12 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Trading Environment
-  epic-2: in-progress
+  epic-2: done
   2-1-environment-structure-and-registration: done
   2-2-observation-construction: done
   2-3-battery-mechanics: done
   2-4-market-settlement-logic: done
-  2-5-episode-flow-and-reset: backlog
+  2-5-episode-flow-and-reset: done
   epic-2-retrospective: optional
 
   # Epic 3: Baseline Benchmarks
