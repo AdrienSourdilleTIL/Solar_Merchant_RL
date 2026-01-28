@@ -53,7 +53,7 @@ development_status:
   2-1-environment-structure-and-registration: done
   2-2-observation-construction: done
   2-3-battery-mechanics: done
-  2-4-market-settlement-logic: ready-for-dev
+  2-4-market-settlement-logic: review
   2-5-episode-flow-and-reset: backlog
   epic-2-retrospective: optional
 

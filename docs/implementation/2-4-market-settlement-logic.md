@@ -1,6 +1,6 @@
 # Story 2.4: Market Settlement Logic
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -21,47 +21,47 @@ So that the reward signal reflects real market economics.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Validate existing market settlement implementation (AC: #1)
-  - [ ] Verify revenue calculation: delivered * price_eur_mwh
-  - [ ] Verify short imbalance: uses price_imbalance_short (expected: 1.5x DA price)
-  - [ ] Verify long imbalance: uses price_imbalance_long (expected: 0.6x DA price)
-  - [ ] Verify reward formula: revenue - imbalance_cost - degradation_cost
-  - [ ] Trace settlement logic through step() method (lines 493-529)
+- [x] Task 1: Validate existing market settlement implementation (AC: #1)
+  - [x] Verify revenue calculation: delivered * price_eur_mwh
+  - [x] Verify short imbalance: uses price_imbalance_short (expected: 1.5x DA price)
+  - [x] Verify long imbalance: uses price_imbalance_long (expected: 0.6x DA price)
+  - [x] Verify reward formula: revenue - imbalance_cost - degradation_cost
+  - [x] Trace settlement logic through step() method (lines 493-529)
 
-- [ ] Task 2: Test revenue calculation (AC: #1)
-  - [ ] Test revenue with zero delivery (0 MWh * price = 0 EUR)
-  - [ ] Test revenue with typical delivery (10 MWh * 50 EUR = 500 EUR)
-  - [ ] Test revenue with maximum delivery (plant capacity * price)
-  - [ ] Test revenue with negative prices (delivered * negative_price = negative revenue)
-  - [ ] Verify revenue accumulates in episode_revenue
+- [x] Task 2: Test revenue calculation (AC: #1)
+  - [x] Test revenue with zero delivery (0 MWh * price = 0 EUR)
+  - [x] Test revenue with typical delivery (10 MWh * 50 EUR = 500 EUR)
+  - [x] Test revenue with maximum delivery (plant capacity * price)
+  - [x] Test revenue with negative prices (delivered * negative_price = negative revenue)
+  - [x] Verify revenue accumulates in episode_revenue
 
-- [ ] Task 3: Test short imbalance settlement (AC: #1)
-  - [ ] Test under-delivery penalty calculation
-  - [ ] Test short penalty rate is 1.5x day-ahead price
-  - [ ] Test partial shortage (delivered < committed but > 0)
-  - [ ] Test complete shortage (delivered = 0, committed > 0)
-  - [ ] Verify imbalance_cost is positive for short positions
+- [x] Task 3: Test short imbalance settlement (AC: #1)
+  - [x] Test under-delivery penalty calculation
+  - [x] Test short penalty rate is 1.5x day-ahead price
+  - [x] Test partial shortage (delivered < committed but > 0)
+  - [x] Test complete shortage (delivered = 0, committed > 0)
+  - [x] Verify imbalance_cost is positive for short positions
 
-- [ ] Task 4: Test long imbalance settlement (AC: #1)
-  - [ ] Test over-delivery value calculation
-  - [ ] Test long rate is 0.6x day-ahead price
-  - [ ] Test excess calculation: delivered - committed
-  - [ ] Test opportunity cost: excess * (price - price_long)
-  - [ ] Verify imbalance_cost reflects lost revenue opportunity
+- [x] Task 4: Test long imbalance settlement (AC: #1)
+  - [x] Test over-delivery value calculation
+  - [x] Test long rate is 0.6x day-ahead price
+  - [x] Test excess calculation: delivered - committed
+  - [x] Test opportunity cost: excess * (price - price_long)
+  - [x] Verify imbalance_cost reflects lost revenue opportunity
 
-- [ ] Task 5: Test reward composition (AC: #1)
-  - [ ] Test reward = revenue - imbalance_cost - degradation_cost
-  - [ ] Test reward with zero imbalance (balanced delivery)
-  - [ ] Test reward with positive imbalance (over-delivery)
-  - [ ] Test reward with negative imbalance (under-delivery)
-  - [ ] Test reward accumulation across episode
+- [x] Task 5: Test reward composition (AC: #1)
+  - [x] Test reward = revenue - imbalance_cost - degradation_cost
+  - [x] Test reward with zero imbalance (balanced delivery)
+  - [x] Test reward with positive imbalance (over-delivery)
+  - [x] Test reward with negative imbalance (under-delivery)
+  - [x] Test reward accumulation across episode
 
-- [ ] Task 6: Test edge cases and economics (AC: #1)
-  - [ ] Test settlement at hour 0 (day transition)
-  - [ ] Test settlement with zero commitment (no penalty)
-  - [ ] Test asymmetric risk: verify short penalty > long opportunity cost
-  - [ ] Test with extreme prices (near-zero, high prices)
-  - [ ] Test settlement when no commitment has been made (todays_commitments = zeros)
+- [x] Task 6: Test edge cases and economics (AC: #1)
+  - [x] Test settlement at hour 0 (day transition)
+  - [x] Test settlement with zero commitment (no penalty)
+  - [x] Test asymmetric risk: verify short penalty > long opportunity cost
+  - [x] Test with extreme prices (near-zero, high prices)
+  - [x] Test settlement when no commitment has been made (todays_commitments = zeros)
 
 ## Dev Notes
 
@@ -330,27 +330,45 @@ src/environment/solar_merchant_env.py
 
 ## Change Log
 
+- **2026-01-27 (Implementation)**: Validated existing settlement logic and created comprehensive test suite (32 tests). All tests pass. Status -> review.
 - **2026-01-26 (Initial)**: Story 2-4 created by SM agent (Bob). Comprehensive context gathered from epics, architecture, PRD, existing code, and Story 2-3 patterns. Status -> ready-for-dev.
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-_To be filled by dev agent_
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
-_To be filled by dev agent_
+- All 32 market settlement tests passed on first run
+- Full regression suite: 108 tests passed, no failures
+- Runtime warnings about cumulative imbalance are expected behavior during stress tests
 
 ### Completion Notes List
 
-_To be filled by dev agent_
+1. **Task 1 - Validation Complete**: Analyzed settlement logic in solar_merchant_env.py (lines 493-529). Confirmed:
+   - Revenue = delivered * price (line 500)
+   - Short imbalance = abs(imbalance) * price_short (line 511)
+   - Long imbalance = excess * (price - price_long) (line 517)
+   - Reward = revenue - imbalance_cost - degradation (line 529)
+   - Imbalance prices correctly derived from data (1.5x short, 0.6x long)
+
+2. **Tasks 2-6 - Tests Created**: Created comprehensive test suite (tests/test_market_settlement.py) with 32 tests covering:
+   - TestSettlementValidation: 5 tests validating core implementation
+   - TestRevenueCalculation: 5 tests for revenue scenarios
+   - TestShortImbalanceSettlement: 5 tests for under-delivery penalties
+   - TestLongImbalanceSettlement: 5 tests for over-delivery opportunity costs
+   - TestRewardComposition: 5 tests for reward formula verification
+   - TestEdgeCasesAndEconomics: 7 tests for edge cases and asymmetric risk verification
+
+3. **Key Findings**: Existing implementation is correct and matches architecture/PRD specifications. No code changes needed - this was a validation-focused story.
 
 ### File List
 
 **New Files:**
-- tests/test_market_settlement.py (to be created)
+- tests/test_market_settlement.py (32 tests for market settlement logic)
 
 **Modified Files:**
-- docs/implementation/2-4-market-settlement-logic.md (this story file)
-- docs/implementation/sprint-status.yaml (status update)
+- docs/implementation/2-4-market-settlement-logic.md (this story file - tasks marked complete)
+- docs/implementation/sprint-status.yaml (status: ready-for-dev → in-progress → review)
