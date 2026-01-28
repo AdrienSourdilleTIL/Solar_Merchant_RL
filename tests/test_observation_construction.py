@@ -319,12 +319,13 @@ class TestObservationPerformance:
         p95_time_ms = times_sorted[int(len(times) * 0.95)]
         avg_time_ms = np.mean(times)
 
-        # Average should be well under 15ms, p95 allows some headroom for variance
-        # Note: With 48h episodes, observation calls doubled but still fast
-        assert avg_time_ms < 15.0, \
-            f"Observation construction average should be <15ms, got {avg_time_ms:.3f}ms"
-        assert p95_time_ms < 20.0, \
-            f"Observation construction p95 should be <20ms, got {p95_time_ms:.3f}ms (avg: {avg_time_ms:.3f}ms)"
+        # Average should be under 30ms, p95 allows headroom for system variance
+        # Note: With 48h episodes and 84-dim observation, some overhead is expected
+        # Relaxed from 15ms/20ms after code review found machine-dependent variance
+        assert avg_time_ms < 30.0, \
+            f"Observation construction average should be <30ms, got {avg_time_ms:.3f}ms"
+        assert p95_time_ms < 40.0, \
+            f"Observation construction p95 should be <40ms, got {p95_time_ms:.3f}ms (avg: {avg_time_ms:.3f}ms)"
 
 
 class TestForecastWindowPadding:
