@@ -1,6 +1,6 @@
 # Story 3.1: Conservative Baseline Policy
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -33,33 +33,33 @@ so that I have a low-risk benchmark strategy.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create baselines module structure (AC: #3)
-  - [ ] Create `src/baselines/__init__.py` with exports
-  - [ ] Create `src/baselines/baseline_policies.py` with module docstring and plant constants
+- [x] Task 1: Create baselines module structure (AC: #3)
+  - [x] Create `src/baselines/__init__.py` with exports
+  - [x] Create `src/baselines/baseline_policies.py` with module docstring and plant constants
 
-- [ ] Task 2: Implement `conservative_policy` function (AC: #1)
-  - [ ] Parse observation vector to extract PV forecast (indices 27-50) and battery SOC (index 1)
-  - [ ] Set commitment fractions to 0.8 for all 24 hours
-  - [ ] Implement battery logic: discharge (action[24] < 0.5) when delivery gap, charge (action[24] > 0.5) when surplus
-  - [ ] Return 25-dim np.float32 array in [0, 1]
+- [x] Task 2: Implement `conservative_policy` function (AC: #1)
+  - [x] Parse observation vector to extract PV forecast (indices 27-50) and battery SOC (index 1)
+  - [x] Set commitment fractions to 0.8 for all 24 hours
+  - [x] Implement battery logic: discharge (action[24] < 0.5) when delivery gap, charge (action[24] > 0.5) when surplus
+  - [x] Return 25-dim np.float32 array in [0, 1]
 
-- [ ] Task 3: Create observation parsing helper (AC: #1, #2)
-  - [ ] Create `_parse_observation(obs: np.ndarray) -> dict` to extract named fields from 84-dim vector
-  - [ ] Extract: hour (idx 0), soc (idx 1), commitments (idx 2-25), imbalance (idx 26), forecast (idx 27-50), prices (idx 51-74), actual_pv (idx 75), weather (idx 76-77), time_features (idx 78-83)
-  - [ ] Private helper — not part of the public baseline interface
+- [x] Task 3: Create observation parsing helper (AC: #1, #2)
+  - [x] Create `_parse_observation(obs: np.ndarray) -> dict` to extract named fields from 84-dim vector
+  - [x] Extract: hour (idx 0), soc (idx 1), commitments (idx 2-25), imbalance (idx 26), forecast (idx 27-50), prices (idx 51-74), actual_pv (idx 75), weather (idx 76-77), time_features (idx 78-83)
+  - [x] Private helper — not part of the public baseline interface
 
-- [ ] Task 4: Write tests for conservative policy (AC: #1, #2, #3)
-  - [ ] Test action shape is (25,) float32
-  - [ ] Test all action values in [0, 1] range
-  - [ ] Test commitment fractions are 0.8 (action[0:24] == 0.8)
-  - [ ] Test battery action responds to delivery gap (discharge when short)
-  - [ ] Test battery action responds to surplus (charge when excess PV)
-  - [ ] Test full episode runs without errors
-  - [ ] Test module imports correctly
+- [x] Task 4: Write tests for conservative policy (AC: #1, #2, #3)
+  - [x] Test action shape is (25,) float32
+  - [x] Test all action values in [0, 1] range
+  - [x] Test commitment fractions are 0.8 (action[0:24] == 0.8)
+  - [x] Test battery action responds to delivery gap (discharge when short)
+  - [x] Test battery action responds to surplus (charge when excess PV)
+  - [x] Test full episode runs without errors
+  - [x] Test module imports correctly
 
-- [ ] Task 5: Run full test suite to verify no regressions (AC: all)
-  - [ ] Run `pytest tests/` — all existing 141+ tests must pass
-  - [ ] Run new baseline tests
+- [x] Task 5: Run full test suite to verify no regressions (AC: all)
+  - [x] Run `pytest tests/` — all existing 141+ tests must pass (184 passed)
+  - [x] Run new baseline tests (15 passed)
 
 ## Dev Notes
 
@@ -225,10 +225,28 @@ Use the shared `env` fixture from `tests/conftest.py` — it creates a `SolarMer
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+- Float32 precision: `assert_array_equal` failed for float32 0.8 vs float64 0.8 comparison — switched to `assert_allclose(atol=1e-7)`.
+
 ### Completion Notes List
 
+- Created `src/baselines/` module from scratch (greenfield implementation).
+- Implemented `conservative_policy()`: commits 80% of forecast every hour, uses battery heuristic (discharge when under-delivering with SOC > 0, charge when over-delivering, idle otherwise).
+- Implemented `_parse_observation()` helper to extract named fields from 84-dim observation vector.
+- 15 new tests covering: module imports, observation parsing, action shape/dtype/range, commitment fractions, battery heuristic (4 scenarios), full episode execution, and episode metrics.
+- All 184 tests pass (169 existing + 15 new). Zero regressions.
+
+### Change Log
+
+- 2026-01-29: Story 3-1 implemented — conservative baseline policy with full test coverage.
+
 ### File List
+
+- `src/baselines/__init__.py` (NEW) — Module init, exports `conservative_policy`
+- `src/baselines/baseline_policies.py` (NEW) — Implementation of `conservative_policy`, `_parse_observation`, and plant constants
+- `tests/test_baseline_policies.py` (NEW) — 15 tests for conservative policy
+- `docs/implementation/3-1-conservative-baseline-policy.md` (MODIFIED) — Story status and task checkboxes updated
+- `docs/implementation/sprint-status.yaml` (MODIFIED) — Story status updated
