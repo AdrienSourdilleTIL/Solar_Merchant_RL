@@ -123,6 +123,17 @@ class TestConservativePolicyBattery:
         action = conservative_policy(obs)
         assert action[24] == 0.5  # Idle (can't discharge empty battery)
 
+    def test_battery_charges_on_pv_surplus(self):
+        """Battery should charge when PV surplus exists above commitment."""
+        obs = np.zeros(84, dtype=np.float32)
+        obs[0] = 14.0 / 24.0  # Hour 14 (normalized)
+        obs[1] = 0.3           # Some SOC
+        obs[26] = 0.0          # Balanced cumulative imbalance
+        obs[16] = 0.2          # Commitment for hour 14 (index 2+14=16): 0.2 normalized
+        obs[75] = 0.5          # Actual PV: 0.5 normalized (surplus above 0.2 commitment)
+        action = conservative_policy(obs)
+        assert action[24] == 1.0  # Should charge due to PV surplus
+
 
 class TestConservativePolicyEpisode:
     """Task 4: Test full episode execution (AC: #2)."""
@@ -154,8 +165,8 @@ class TestConservativePolicyEpisode:
         while not done:
             action = conservative_policy(obs)
             obs, reward, terminated, truncated, info = env.step(action)
-            total_revenue += info.get("revenue", 0.0)
-            total_imbalance_cost += info.get("imbalance_cost", 0.0)
+            total_revenue += info["revenue"]
+            total_imbalance_cost += info["imbalance_cost"]
             done = terminated or truncated
 
         assert np.isfinite(total_revenue)
@@ -174,3 +185,22 @@ class TestConservativePolicyEpisode:
             np.testing.assert_allclose(action[0:24], 0.8, atol=1e-7)
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
+
+    def test_battery_responds_during_episode(self, env):
+        """Verify battery action varies in response to conditions during episode."""
+        obs, _ = env.reset(seed=42)
+        battery_actions = []
+
+        done = False
+        while not done:
+            action = conservative_policy(obs)
+            battery_actions.append(float(action[24]))
+            obs, _, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+        # Battery should not idle the entire 48-hour episode
+        unique_actions = set(battery_actions)
+        assert len(unique_actions) > 1, (
+            f"Battery was stuck at {unique_actions} for entire episode — "
+            "should respond to imbalance/surplus"
+        )

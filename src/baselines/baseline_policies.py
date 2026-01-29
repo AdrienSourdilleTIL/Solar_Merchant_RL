@@ -61,15 +61,20 @@ def conservative_policy(obs: np.ndarray) -> np.ndarray:
 
     action = np.full(25, COMMITMENT_FRACTION, dtype=np.float32)
 
-    # Battery heuristic based on cumulative imbalance and SOC
+    # Battery heuristic based on cumulative imbalance, SOC, and PV surplus
     cumulative_imbalance = parsed["cumulative_imbalance"]
     soc = parsed["soc"]
+
+    # Detect PV surplus above commitment for the current hour
+    hour_idx = int(round(parsed["hour"] * 24)) % 24
+    current_commitment = parsed["commitments"][hour_idx]
+    has_pv_surplus = parsed["actual_pv"] > current_commitment
 
     if cumulative_imbalance < 0 and soc > 0:
         # Under-delivering and have battery charge: discharge
         action[24] = 0.0
-    elif cumulative_imbalance > 0:
-        # Over-delivering: charge battery to store surplus
+    elif cumulative_imbalance > 0 or has_pv_surplus:
+        # Over-delivering or PV surplus: charge battery
         action[24] = 1.0
     else:
         # Balanced: idle

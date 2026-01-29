@@ -1,6 +1,6 @@
 # Story 3.1: Conservative Baseline Policy
 
-Status: review
+Status: done
 
 ## Story
 
@@ -59,7 +59,7 @@ so that I have a low-risk benchmark strategy.
 
 - [x] Task 5: Run full test suite to verify no regressions (AC: all)
   - [x] Run `pytest tests/` — all existing 141+ tests must pass (184 passed)
-  - [x] Run new baseline tests (15 passed)
+  - [x] Run new baseline tests (17 passed after review fixes)
 
 ## Dev Notes
 
@@ -242,11 +242,12 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 ### Change Log
 
 - 2026-01-29: Story 3-1 implemented — conservative baseline policy with full test coverage.
+- 2026-01-29: Code review (AI) — Fixed 3 MEDIUM issues: added PV surplus charging condition to battery heuristic, replaced `.get()` with direct key access in metrics test, added episode-level battery response test and PV surplus unit test. 186 total tests pass.
 
 ### File List
 
 - `src/baselines/__init__.py` (NEW) — Module init, exports `conservative_policy`
-- `src/baselines/baseline_policies.py` (NEW) — Implementation of `conservative_policy`, `_parse_observation`, and plant constants
-- `tests/test_baseline_policies.py` (NEW) — 15 tests for conservative policy
+- `src/baselines/baseline_policies.py` (NEW, REVIEW-UPDATED) — Implementation of `conservative_policy`, `_parse_observation`, and plant constants. Review fix: added "OR surplus PV" charging condition.
+- `tests/test_baseline_policies.py` (NEW, REVIEW-UPDATED) — 17 tests for conservative policy. Review fixes: direct key access in metrics test, added PV surplus unit test, added episode-level battery response test.
 - `docs/implementation/3-1-conservative-baseline-policy.md` (MODIFIED) — Story status and task checkboxes updated
 - `docs/implementation/sprint-status.yaml` (MODIFIED) — Story status updated
