@@ -20,6 +20,9 @@ BATTERY_POWER_MW = 5.0
 # Conservative policy parameters
 COMMITMENT_FRACTION = 0.8
 
+# Aggressive policy parameters
+AGGRESSIVE_FRACTION = 1.0
+
 
 def _parse_observation(obs: np.ndarray) -> dict:
     """Extract named fields from the 84-dimensional observation vector.
@@ -78,6 +81,43 @@ def conservative_policy(obs: np.ndarray) -> np.ndarray:
         action[24] = 1.0
     else:
         # Balanced: idle
+        action[24] = 0.5
+
+    return action
+
+
+def aggressive_policy(obs: np.ndarray) -> np.ndarray:
+    """Aggressive baseline: commit 100% of max capacity, discharge battery aggressively.
+
+    Strategy:
+        - Commitment: Set all 24 hourly fractions to 1.0 (100% of forecast + battery).
+        - Battery: Discharge by default to meet high commitments, charge only when
+          PV surplus exists above commitment and SOC is not full, idle when SOC is empty.
+
+    Args:
+        obs: 84-dimensional observation from SolarMerchantEnv.
+
+    Returns:
+        25-dimensional action array in [0, 1] range (float32).
+    """
+    parsed = _parse_observation(obs)
+
+    action = np.full(25, AGGRESSIVE_FRACTION, dtype=np.float32)
+
+    # Battery heuristic: aggressive defaults to discharge
+    soc = parsed["soc"]
+    hour_idx = int(round(parsed["hour"] * 24)) % 24
+    current_commitment = parsed["commitments"][hour_idx]
+    has_pv_surplus = parsed["actual_pv"] > current_commitment
+
+    if has_pv_surplus and soc < 1.0:
+        # PV surplus above commitment and battery not full: charge
+        action[24] = 1.0
+    elif soc > 1e-6:
+        # Default: discharge aggressively to meet high commitments
+        action[24] = 0.0
+    else:
+        # SOC effectively empty and no surplus: idle
         action[24] = 0.5
 
     return action
