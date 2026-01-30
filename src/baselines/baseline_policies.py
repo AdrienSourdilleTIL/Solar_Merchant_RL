@@ -23,6 +23,10 @@ COMMITMENT_FRACTION = 0.8
 # Aggressive policy parameters
 AGGRESSIVE_FRACTION = 1.0
 
+# Price-aware policy parameters
+PRICE_AWARE_HIGH_FRACTION = 1.0
+PRICE_AWARE_LOW_FRACTION = 0.5
+
 
 def _parse_observation(obs: np.ndarray) -> dict:
     """Extract named fields from the 84-dimensional observation vector.
@@ -118,6 +122,55 @@ def aggressive_policy(obs: np.ndarray) -> np.ndarray:
         action[24] = 0.0
     else:
         # SOC effectively empty and no surplus: idle
+        action[24] = 0.5
+
+    return action
+
+
+def price_aware_policy(obs: np.ndarray) -> np.ndarray:
+    """Price-aware baseline: adjust commitment and battery based on price levels.
+
+    Strategy:
+        - Commitment: Set per-hour fractions based on price relative to 24h median.
+          High-price hours get 1.0, low-price hours get 0.5.
+        - Battery: Discharge during high-price hours, charge during low-price hours.
+
+    Args:
+        obs: 84-dimensional observation from SolarMerchantEnv.
+
+    Returns:
+        25-dimensional action array in [0, 1] range (float32).
+    """
+    parsed = _parse_observation(obs)
+
+    action = np.full(25, PRICE_AWARE_LOW_FRACTION, dtype=np.float32)
+
+    # Compute median of 24h price window as threshold
+    prices = parsed["prices"]
+    price_median = np.median(prices)
+
+    # Set per-hour commitment fractions based on price level (vectorized)
+    action[0:24] = np.where(
+        prices > price_median,
+        PRICE_AWARE_HIGH_FRACTION,
+        PRICE_AWARE_LOW_FRACTION,
+    )
+
+    # Battery heuristic: price-driven charge/discharge with PV surplus awareness
+    soc = parsed["soc"]
+    hour_idx = int(round(parsed["hour"] * 24)) % 24
+    current_price = prices[hour_idx]
+    current_commitment = parsed["commitments"][hour_idx]
+    has_pv_surplus = parsed["actual_pv"] > current_commitment
+
+    if current_price > price_median and soc > 1e-6:
+        # High-price hour with charge available: discharge
+        action[24] = 0.0
+    elif current_price < price_median and has_pv_surplus and soc < 1.0 - 1e-6:
+        # Low-price hour with PV surplus and room to charge: charge
+        action[24] = 1.0
+    else:
+        # SOC boundary, no PV surplus, or neutral price: idle
         action[24] = 0.5
 
     return action

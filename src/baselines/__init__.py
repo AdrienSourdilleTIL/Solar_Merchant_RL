@@ -5,6 +5,6 @@ against the RL agent. Each policy takes a raw observation vector and
 returns an action array compatible with SolarMerchantEnv.
 """
 
-from .baseline_policies import aggressive_policy, conservative_policy
+from .baseline_policies import aggressive_policy, conservative_policy, price_aware_policy
 
-__all__ = ["aggressive_policy", "conservative_policy"]
+__all__ = ["aggressive_policy", "conservative_policy", "price_aware_policy"]
