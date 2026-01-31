@@ -1,6 +1,6 @@
 # Story 3.4: Baseline Evaluation Framework
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -37,49 +37,49 @@ so that I can compare different strategies fairly.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `src/evaluation/` module structure (AC: #3)
-  - [ ] Create `src/evaluation/__init__.py` with `evaluate_policy` export
-  - [ ] Create `src/evaluation/evaluate.py` with module docstring
+- [x] Task 1: Create `src/evaluation/` module structure (AC: #3)
+  - [x] Create `src/evaluation/__init__.py` with `evaluate_policy` export
+  - [x] Create `src/evaluation/evaluate.py` with module docstring
 
-- [ ] Task 2: Implement `evaluate_policy` function (AC: #1)
-  - [ ] Implement `evaluate_policy(policy, env, n_episodes: int, seed: int = 42) -> dict[str, float]`
-  - [ ] Loop: reset env with seed, run policy until episode terminates, collect per-episode metrics from `info` dict
-  - [ ] Increment seed per episode for diversity (`seed + i` for episode `i`)
-  - [ ] Accumulate per-episode: revenue, imbalance_cost, net_profit, delivered, committed, pv_actual, battery_throughput
-  - [ ] Compute averages across episodes for all metrics
-  - [ ] Return dict with averaged metrics (see Metrics Dict section below)
+- [x] Task 2: Implement `evaluate_policy` function (AC: #1)
+  - [x] Implement `evaluate_policy(policy, env, n_episodes: int, seed: int = 42) -> dict[str, float]`
+  - [x] Loop: reset env with seed, run policy until episode terminates, collect per-episode metrics from `info` dict
+  - [x] Increment seed per episode for diversity (`seed + i` for episode `i`)
+  - [x] Accumulate per-episode: revenue, imbalance_cost, net_profit, delivered, committed, pv_actual, battery_throughput
+  - [x] Compute averages across episodes for all metrics
+  - [x] Return dict with averaged metrics (see Metrics Dict section below)
 
-- [ ] Task 3: Implement `print_comparison` function (AC: #2)
-  - [ ] Implement `print_comparison(results: list[dict[str, float]]) -> None`
-  - [ ] Print formatted table: policy name, net profit, imbalance cost, delivery ratio
-  - [ ] Identify and highlight best policy by net profit
+- [x] Task 3: Implement `print_comparison` function (AC: #2)
+  - [x] Implement `print_comparison(results: list[dict[str, float]]) -> None`
+  - [x] Print formatted table: policy name, net profit, imbalance cost, delivery ratio
+  - [x] Identify and highlight best policy by net profit
 
-- [ ] Task 4: Implement `save_results` function (AC: #2)
-  - [ ] Implement `save_results(results: list[dict[str, float]], output_path: Path) -> None`
-  - [ ] Save to CSV using pandas DataFrame
-  - [ ] Create output directory if it doesn't exist
+- [x] Task 4: Implement `save_results` function (AC: #2)
+  - [x] Implement `save_results(results: list[dict[str, float]], output_path: Path) -> None`
+  - [x] Save to CSV using pandas DataFrame
+  - [x] Create output directory if it doesn't exist
 
-- [ ] Task 5: Create `evaluate_baselines.py` script (AC: #4)
-  - [ ] Create `src/evaluation/evaluate_baselines.py` with `main()` entry point
-  - [ ] Load test data from `data/processed/test.csv`
-  - [ ] Import all three baselines from `src.baselines`
-  - [ ] Evaluate each on the test environment
-  - [ ] Print comparison and save to `results/metrics/baseline_comparison.csv`
+- [x] Task 5: Create `evaluate_baselines.py` script (AC: #4)
+  - [x] Create `src/evaluation/evaluate_baselines.py` with `main()` entry point
+  - [x] Load test data from `data/processed/test.csv`
+  - [x] Import all three baselines from `src.baselines`
+  - [x] Evaluate each on the test environment
+  - [x] Print comparison and save to `results/metrics/baseline_comparison.csv`
 
-- [ ] Task 6: Write tests (AC: #1, #2, #3)
-  - [ ] Create `tests/test_evaluation.py`
-  - [ ] Test `evaluate_policy` returns correct dict keys
-  - [ ] Test metrics are finite and reasonable (non-negative revenue, non-negative imbalance_cost)
-  - [ ] Test multi-episode averaging produces consistent results
-  - [ ] Test n_episodes=1 works
-  - [ ] Test with each baseline policy (conservative, aggressive, price_aware)
-  - [ ] Test `print_comparison` runs without error
-  - [ ] Test `save_results` creates CSV file
-  - [ ] Test module import of `evaluate_policy`
+- [x] Task 6: Write tests (AC: #1, #2, #3)
+  - [x] Create `tests/test_evaluation.py`
+  - [x] Test `evaluate_policy` returns correct dict keys
+  - [x] Test metrics are finite and reasonable (non-negative revenue, non-negative imbalance_cost)
+  - [x] Test multi-episode averaging produces consistent results
+  - [x] Test n_episodes=1 works
+  - [x] Test with each baseline policy (conservative, aggressive, price_aware)
+  - [x] Test `print_comparison` runs without error
+  - [x] Test `save_results` creates CSV file
+  - [x] Test module import of `evaluate_policy`
 
-- [ ] Task 7: Run full test suite to verify no regressions (AC: all)
-  - [ ] Run `pytest tests/` — all existing 221+ tests must pass
-  - [ ] Run new evaluation tests
+- [x] Task 7: Run full test suite to verify no regressions (AC: all)
+  - [x] Run `pytest tests/` — all existing 221+ tests must pass
+  - [x] Run new evaluation tests
 
 ## Dev Notes
 
@@ -442,14 +442,62 @@ No existing files should be modified (except sprint-status.yaml).
 - [Source: docs/implementation/3-1-conservative-baseline-policy.md](../../docs/implementation/3-1-conservative-baseline-policy.md) — conftest.py env fixture, 48h episodes, float precision lesson
 - [Source: CLAUDE.md#Architecture](../../CLAUDE.md) — Evaluation interface and module structure
 
+## Change Log
+
+- 2026-01-31: Implemented baseline evaluation framework — all 7 tasks completed, 20 new tests added, 241 total tests passing (0 regressions)
+- 2026-01-31: Code review — 5 issues fixed (1 HIGH, 4 MEDIUM), 8 new tests added, 249 total tests passing (0 regressions)
+
 ## Dev Agent Record
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+No issues encountered during implementation.
+
 ### Completion Notes List
 
+- Task 1: Created `src/evaluation/` module with `__init__.py` exporting `evaluate_policy` and `evaluate.py` with module docstring.
+- Task 2: Implemented `evaluate_policy(policy, env, n_episodes, seed)` — loops over episodes with incremented seeds, accumulates revenue/imbalance_cost/delivered/committed/pv_actual/battery_throughput from env info dict, computes delivery_ratio and battery_cycles, returns averaged metrics dict with all 9 required keys.
+- Task 3: Implemented `print_comparison(results)` — formatted table with policy name, net profit, imbalance cost, delivery %, episode count. Identifies and highlights best policy by net profit.
+- Task 4: Implemented `save_results(results, output_path)` — saves to CSV via pandas DataFrame, creates output directory if needed.
+- Task 5: Created `evaluate_baselines.py` script with `main()` entry point — loads test.csv, imports all 3 baselines from `src.baselines`, evaluates each with 10 episodes, prints comparison, saves CSV to `results/metrics/baseline_comparison.csv`.
+- Task 6: Created `tests/test_evaluation.py` with 20 tests across 6 test classes covering imports, output keys, metric validity, multi-episode averaging, all 3 baselines, print_comparison output, and save_results CSV creation.
+- Task 7: Full test suite: 241 passed (221 existing + 20 new), 0 failures, 0 regressions.
+
 ### File List
+
+- `src/evaluation/__init__.py` — NEW: Module init, exports evaluate_policy
+- `src/evaluation/evaluate.py` — NEW: evaluate_policy, print_comparison, save_results (MODIFIED in review: added input validation, degradation_cost/total_reward/n_episodes tracking, fixed print_comparison episodes, fixed CSV column order)
+- `src/evaluation/evaluate_baselines.py` — NEW: Script to evaluate all baselines (MODIFIED in review: removed manual episodes injection)
+- `tests/test_evaluation.py` — NEW: 28 tests for evaluation module (8 added in review: input validation, degradation tracking, CSV column order, baselines script integration)
+- `docs/implementation/sprint-status.yaml` — MODIFIED: 3-4 status updated to done
+- `docs/implementation/3-4-baseline-evaluation-framework.md` — MODIFIED: Tasks marked complete, review notes added
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Claude Opus 4.5 (code-review workflow)
+**Date:** 2026-01-31
+**Outcome:** Approved (after fixes)
+
+### Issues Found: 1 HIGH, 4 MEDIUM, 3 LOW
+
+All HIGH and MEDIUM issues were auto-fixed. LOW issues deferred.
+
+| ID | Severity | Description | Status |
+|----|----------|-------------|--------|
+| H1 | HIGH | `n_episodes=0` crashes with IndexError — added input validation | FIXED |
+| M1 | MEDIUM | `reward` from env.step() discarded — added `total_reward` and `degradation_cost` tracking | FIXED |
+| M2 | MEDIUM | `print_comparison` episodes column used fragile mixed-type fallback — added `n_episodes` to return dict | FIXED |
+| M3 | MEDIUM | `evaluate_baselines.py` had zero test coverage — added import + integration tests | FIXED |
+| M4 | MEDIUM | `save_results` didn't control CSV column order — added preferred column ordering | FIXED |
+| L1 | LOW | `print_comparison` and `save_results` not exported from `__init__.py` | DEFERRED |
+| L2 | LOW | No `__all__` defined in `evaluate.py` | DEFERRED |
+| L3 | LOW | `delivery_ratio` averages mean-of-ratios instead of ratio-of-means | DEFERRED |
+
+### Test Results After Fixes
+
+- **249 tests passed** (221 existing + 28 evaluation)
+- **0 failures, 0 regressions**
