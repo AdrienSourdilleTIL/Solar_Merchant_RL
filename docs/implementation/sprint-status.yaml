@@ -62,7 +62,7 @@ development_status:
   3-1-conservative-baseline-policy: done
   3-2-aggressive-baseline-policy: done
   3-3-price-aware-baseline-policy: done
-  3-4-baseline-evaluation-framework: backlog
+  3-4-baseline-evaluation-framework: ready-for-dev
   epic-3-retrospective: optional
 
   # Epic 4: RL Training Pipeline
