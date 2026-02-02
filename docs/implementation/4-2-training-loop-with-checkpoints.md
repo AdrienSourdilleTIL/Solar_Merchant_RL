@@ -1,6 +1,6 @@
 # Story 4.2: Training Loop with Checkpoints
 
-Status: review
+Status: done
 
 ## Story
 
@@ -264,10 +264,18 @@ None — clean implementation, no debug issues encountered.
 - Verified existing `model.learn()` call uses `TOTAL_TIMESTEPS`, `progress_bar=True`, and `KeyboardInterrupt` handler saves final model
 - Added 5 new tests in `TestTrainingLoopConstants` class to `tests/test_training_config.py`
 - All 268 tests pass (263 existing + 5 new), zero regressions
+- **[Note]** This commit also includes story 4-1 (SAC Agent Configuration) code that was not previously committed separately: `SEED`, `set_all_seeds()`, `NET_ARCH`, `ACTIVATION_FN`, `policy_kwargs`, deferred SB3 imports, docstrings, and the story 4-1 file itself
+- **[Note]** Removed legacy quick evaluation block from `train.py` (3-episode post-training eval) — replaced with pointer to `evaluate_baselines.py` / `evaluate.py`
+- **[Note]** Updated `docs/architecture.md` VecNormalize references to reflect internal normalization decision (3 lines changed)
 
 ### Change Log
 - 2026-02-01: Story 4-2 implementation complete — constants extracted, time reporting added, VecNormalize documented, directories hardened, 5 tests added
+- 2026-02-02: Code review fixes — elapsed time now prints actual `model.num_timesteps` (not configured total), File List corrected, completion notes updated with undocumented changes
 
 ### File List
-- `src/training/train.py` (modified) — Added constants, time import, elapsed time reporting, VecNormalize comment, subdirectory creation, summary prints
-- `tests/test_training_config.py` (modified) — Added `TestTrainingLoopConstants` class with 5 tests
+- `src/training/train.py` (modified) — Added constants, time import, elapsed time reporting, VecNormalize comment, subdirectory creation, summary prints; also includes story 4-1 changes (SEED, set_all_seeds, NET_ARCH, ACTIVATION_FN, policy_kwargs, deferred imports)
+- `tests/test_training_config.py` (new) — Created with `TestSeedManagement` (3 tests, story 4-1), `TestHyperparameterConstants` (10 tests, story 4-1), `TestTrainingLoopConstants` (5 tests, story 4-2), `TestCreateEnv` (1 test, story 4-1)
+- `docs/architecture.md` (modified) — Updated 3 VecNormalize references to reflect internal normalization
+- `docs/implementation/4-1-sac-agent-configuration.md` (new) — Story 4-1 file, committed alongside 4-2
+- `docs/implementation/sprint-status.yaml` (modified) — Updated epic-3 to done, epic-4 to in-progress, 4-1 to done, 4-2 to review
+- `results/metrics/baseline_comparison.csv` (new) — Baseline comparison results (Epic 3 artifact, bundled in this commit)

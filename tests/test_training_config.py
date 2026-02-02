@@ -141,6 +141,24 @@ class TestTrainingLoopConstants:
 
         assert TOTAL_TIMESTEPS % CHECKPOINT_FREQ == 0
 
+    def test_eval_freq_divides_total(self):
+        from src.training.train import EVAL_FREQ, TOTAL_TIMESTEPS
+
+        assert TOTAL_TIMESTEPS % EVAL_FREQ == 0
+
+    def test_time_module_available(self):
+        """Verify time module is imported at module level for elapsed reporting."""
+        import src.training.train as train_module
+
+        assert hasattr(train_module, 'time')
+
+    def test_checkpoint_and_eval_directories_defined(self):
+        """Verify MODEL_PATH is defined for checkpoint/best subdirectory creation."""
+        from src.training.train import MODEL_PATH
+
+        assert MODEL_PATH is not None
+        assert isinstance(MODEL_PATH, Path)
+
 
 class TestCreateEnv:
     """Tests for environment creation utility."""

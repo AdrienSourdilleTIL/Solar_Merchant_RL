@@ -136,7 +136,7 @@ def main() -> None:
 
     # Checkpoint callback
     # No VecNormalize stats to save — observations normalized internally by
-    # SolarMerchantEnv (see story 4-1)
+    # SolarMerchantEnv (see architecture.md, internal normalization decision)
     checkpoint_callback = CheckpointCallback(
         save_freq=CHECKPOINT_FREQ,
         save_path=str(MODEL_PATH / 'checkpoints'),
@@ -202,7 +202,7 @@ def main() -> None:
     hours, remainder = divmod(int(elapsed), 3600)
     minutes, seconds = divmod(remainder, 60)
     print(f"\nTraining time: {hours:02d}:{minutes:02d}:{seconds:02d}")
-    print(f"Total timesteps: {TOTAL_TIMESTEPS:,}")
+    print(f"Timesteps completed: {model.num_timesteps:,} / {TOTAL_TIMESTEPS:,}")
 
     # Save final model
     final_model_path = MODEL_PATH / 'solar_merchant_final.zip'

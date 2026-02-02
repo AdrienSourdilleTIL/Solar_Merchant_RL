@@ -68,7 +68,7 @@ development_status:
   # Epic 4: RL Training Pipeline
   epic-4: in-progress
   4-1-sac-agent-configuration: done
-  4-2-training-loop-with-checkpoints: review
+  4-2-training-loop-with-checkpoints: done
   4-3-tensorboard-logging: backlog
   4-4-model-loading-and-resumption: backlog
   epic-4-retrospective: optional
