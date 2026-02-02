@@ -160,6 +160,25 @@ class TestTrainingLoopConstants:
         assert isinstance(MODEL_PATH, Path)
 
 
+class TestTensorBoardConfig:
+    """Tests for TensorBoard logging configuration."""
+
+    def test_tensorboard_log_dir_is_path(self):
+        from src.training.train import TENSORBOARD_LOG_DIR
+
+        assert isinstance(TENSORBOARD_LOG_DIR, Path)
+
+    def test_tensorboard_log_dir_name(self):
+        from src.training.train import TENSORBOARD_LOG_DIR
+
+        assert TENSORBOARD_LOG_DIR.name == 'tensorboard'
+
+    def test_tensorboard_log_dir_under_output(self):
+        from src.training.train import OUTPUT_PATH, TENSORBOARD_LOG_DIR
+
+        assert TENSORBOARD_LOG_DIR.parent == OUTPUT_PATH
+
+
 class TestCreateEnv:
     """Tests for environment creation utility."""
 

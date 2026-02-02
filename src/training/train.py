@@ -23,6 +23,7 @@ from environment.solar_merchant_env import SolarMerchantEnv
 DATA_PATH = Path(__file__).parent.parent.parent / 'data' / 'processed'
 OUTPUT_PATH = Path(__file__).parent.parent.parent / 'outputs'
 MODEL_PATH = Path(__file__).parent.parent.parent / 'models'
+TENSORBOARD_LOG_DIR = OUTPUT_PATH / 'tensorboard'
 
 # Training hyperparameters
 TOTAL_TIMESTEPS = 500_000  # ~1.4 passes through 7 years of data
@@ -100,6 +101,7 @@ def main() -> None:
 
     # Ensure output directories exist
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+    TENSORBOARD_LOG_DIR.mkdir(parents=True, exist_ok=True)
     MODEL_PATH.mkdir(parents=True, exist_ok=True)
     (MODEL_PATH / 'checkpoints').mkdir(parents=True, exist_ok=True)
     (MODEL_PATH / 'best').mkdir(parents=True, exist_ok=True)
@@ -166,6 +168,7 @@ def main() -> None:
     print(f"  Checkpoint freq: {CHECKPOINT_FREQ:,}")
     print(f"  Eval freq: {EVAL_FREQ:,}")
     print(f"  Eval episodes: {N_EVAL_EPISODES}")
+    print(f"  TensorBoard log: {TENSORBOARD_LOG_DIR}")
 
     model = SAC(
         'MlpPolicy',
@@ -180,11 +183,15 @@ def main() -> None:
         seed=SEED,
         policy_kwargs=policy_kwargs,
         verbose=1,
-        tensorboard_log=str(OUTPUT_PATH / 'tensorboard')
+        # SB3 automatically logs to TensorBoard: rollout/ep_rew_mean,
+        # rollout/ep_len_mean, train/actor_loss, train/critic_loss,
+        # train/ent_coef, train/ent_coef_loss, train/learning_rate
+        tensorboard_log=str(TENSORBOARD_LOG_DIR)
     )
 
     # Train
     print("\nStarting training...")
+    print(f"Launch TensorBoard: tensorboard --logdir {TENSORBOARD_LOG_DIR}")
     print("="*60)
 
     start_time = time.time()
