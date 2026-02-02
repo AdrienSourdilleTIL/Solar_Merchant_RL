@@ -139,7 +139,7 @@ mypy>=1.0.0
 
 **Important Decisions (Shape Architecture):**
 - Episode structure (fixed 24-hour)
-- Observation normalization (VecNormalize)
+- Observation normalization (internal, Monitor-only wrapping)
 - Checkpoint strategy (periodic 50k)
 
 **Deferred Decisions (Post-MVP):**
@@ -161,7 +161,7 @@ mypy>=1.0.0
 |----------|--------|-----------|
 | **Gym API** | Gymnasium >=0.29 | Modern API, actively maintained |
 | **Episode length** | Fixed 24 hours | Matches day-ahead market cycle |
-| **Observation normalization** | SB3 VecNormalize | Automatic, saves running statistics |
+| **Observation normalization** | Internal (SolarMerchantEnv norm_factors) | No VecNormalize — env normalizes observations internally to avoid double-normalization |
 | **Action handling** | Raw [0,1] range | Environment interprets as fractions |
 
 ### Training Architecture
@@ -185,7 +185,7 @@ mypy>=1.0.0
 ### Cross-Component Dependencies
 
 - Data pipeline outputs → Environment loads
-- Environment → Training wraps with VecNormalize
+- Environment → Training wraps with Monitor (no VecNormalize — observations normalized internally)
 - Training saves → Evaluation loads
 - Evaluation → Visualization consumes metrics
 

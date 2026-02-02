@@ -5,17 +5,17 @@ Uses Soft Actor-Critic (SAC) algorithm to train an agent for
 day-ahead bidding and battery management.
 """
 
+import random
 import sys
+import time
 from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pandas as pd
 import numpy as np
-from stable_baselines3 import SAC
-from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
-from stable_baselines3.common.monitor import Monitor
+import pandas as pd
+import torch
 
 from environment.solar_merchant_env import SolarMerchantEnv
 
@@ -33,6 +33,16 @@ GAMMA = 0.999  # High discount for long-horizon planning
 TAU = 0.005
 TRAIN_FREQ = 1
 GRADIENT_STEPS = 1
+SEED = 42
+
+# Training loop configuration
+CHECKPOINT_FREQ = 50_000   # Save checkpoint every N steps
+EVAL_FREQ = 10_000         # Evaluate every N steps
+N_EVAL_EPISODES = 5        # Episodes per evaluation
+
+# Network architecture
+NET_ARCH = [256, 256]
+ACTIVATION_FN = torch.nn.ReLU
 
 # Plant configuration
 PLANT_CONFIG = {
@@ -44,16 +54,55 @@ PLANT_CONFIG = {
 }
 
 
+def set_all_seeds(seed: int) -> None:
+    """Set random seeds for reproducibility across all libraries.
+
+    Args:
+        seed: Integer seed value.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 def create_env(data_path: Path, **config) -> SolarMerchantEnv:
-    """Create environment from data file."""
+    """Create a SolarMerchantEnv from a CSV data file.
+
+    Args:
+        data_path: Path to the processed CSV data file with datetime column.
+        **config: Plant configuration keyword arguments passed to SolarMerchantEnv
+            (e.g. plant_capacity_mw, battery_capacity_mwh).
+
+    Returns:
+        Configured SolarMerchantEnv instance ready for training or evaluation.
+    """
     df = pd.read_csv(data_path, parse_dates=['datetime'])
     return SolarMerchantEnv(df, **config)
 
 
-def main():
+def main() -> None:
+    """Train a SAC agent on the solar merchant environment.
+
+    Sets random seeds for reproducibility, creates training and evaluation
+    environments, configures the SAC agent with hyperparameters and network
+    architecture, then runs the training loop with checkpoint and eval callbacks.
+    """
+    # SB3 imports deferred to main() so module-level constants and set_all_seeds
+    # are importable in test environments without stable_baselines3 installed.
+    from stable_baselines3 import SAC
+    from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
+    from stable_baselines3.common.monitor import Monitor
+
+    set_all_seeds(SEED)
+
     # Ensure output directories exist
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
     MODEL_PATH.mkdir(parents=True, exist_ok=True)
+    (MODEL_PATH / 'checkpoints').mkdir(parents=True, exist_ok=True)
+    (MODEL_PATH / 'best').mkdir(parents=True, exist_ok=True)
 
     # Load training data
     train_path = DATA_PATH / 'train.csv'
@@ -64,6 +113,8 @@ def main():
         print("Run prepare_dataset.py first.")
         return
 
+    # No VecNormalize — observations are normalized internally by SolarMerchantEnv
+    # (see solar_merchant_env.py norm_factors). Adding VecNormalize would double-normalize.
     print("Creating training environment...")
     train_env = Monitor(create_env(train_path, **PLANT_CONFIG))
 
@@ -77,15 +128,17 @@ def main():
             eval_env,
             best_model_save_path=str(MODEL_PATH / 'best'),
             log_path=str(OUTPUT_PATH / 'eval_logs'),
-            eval_freq=10_000,
-            n_eval_episodes=5,
+            eval_freq=EVAL_FREQ,
+            n_eval_episodes=N_EVAL_EPISODES,
             deterministic=True,
             render=False
         )
 
     # Checkpoint callback
+    # No VecNormalize stats to save — observations normalized internally by
+    # SolarMerchantEnv (see story 4-1)
     checkpoint_callback = CheckpointCallback(
-        save_freq=50_000,
+        save_freq=CHECKPOINT_FREQ,
         save_path=str(MODEL_PATH / 'checkpoints'),
         name_prefix='solar_merchant'
     )
@@ -96,12 +149,23 @@ def main():
         callbacks.append(eval_callback)
 
     # Create SAC agent
+    policy_kwargs = dict(
+        net_arch=NET_ARCH,
+        activation_fn=ACTIVATION_FN,
+    )
+
     print("\nInitializing SAC agent...")
     print(f"  Learning rate: {LEARNING_RATE}")
     print(f"  Batch size: {BATCH_SIZE}")
     print(f"  Buffer size: {BUFFER_SIZE}")
     print(f"  Gamma: {GAMMA}")
+    print(f"  Seed: {SEED}")
+    print(f"  Net arch: {NET_ARCH}")
+    print(f"  Activation: {ACTIVATION_FN.__name__}")
     print(f"  Total timesteps: {TOTAL_TIMESTEPS:,}")
+    print(f"  Checkpoint freq: {CHECKPOINT_FREQ:,}")
+    print(f"  Eval freq: {EVAL_FREQ:,}")
+    print(f"  Eval episodes: {N_EVAL_EPISODES}")
 
     model = SAC(
         'MlpPolicy',
@@ -113,6 +177,8 @@ def main():
         tau=TAU,
         train_freq=TRAIN_FREQ,
         gradient_steps=GRADIENT_STEPS,
+        seed=SEED,
+        policy_kwargs=policy_kwargs,
         verbose=1,
         tensorboard_log=str(OUTPUT_PATH / 'tensorboard')
     )
@@ -120,6 +186,8 @@ def main():
     # Train
     print("\nStarting training...")
     print("="*60)
+
+    start_time = time.time()
 
     try:
         model.learn(
@@ -130,37 +198,19 @@ def main():
     except KeyboardInterrupt:
         print("\nTraining interrupted by user.")
 
+    elapsed = time.time() - start_time
+    hours, remainder = divmod(int(elapsed), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    print(f"\nTraining time: {hours:02d}:{minutes:02d}:{seconds:02d}")
+    print(f"Total timesteps: {TOTAL_TIMESTEPS:,}")
+
     # Save final model
     final_model_path = MODEL_PATH / 'solar_merchant_final.zip'
     model.save(str(final_model_path))
     print(f"\nModel saved to {final_model_path}")
 
-    # Quick evaluation
-    print("\nRunning quick evaluation on training data...")
-    eval_episodes = 3
-    total_rewards = []
-
-    for ep in range(eval_episodes):
-        obs, _ = train_env.reset()
-        episode_reward = 0
-        steps = 0
-        max_steps = 24 * 7  # 1 week
-
-        while steps < max_steps:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = train_env.step(action)
-            episode_reward += reward
-            steps += 1
-            if terminated or truncated:
-                break
-
-        total_rewards.append(episode_reward)
-        print(f"  Episode {ep+1}: reward = {episode_reward:.2f}")
-
-    print(f"\nMean episode reward: {np.mean(total_rewards):.2f}")
-    print(f"Std episode reward: {np.std(total_rewards):.2f}")
-
     print("\nTraining complete!")
+    print("Run evaluate_baselines.py or evaluate.py for proper evaluation.")
 
 
 if __name__ == '__main__':
