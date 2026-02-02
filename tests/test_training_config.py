@@ -179,6 +179,59 @@ class TestTensorBoardConfig:
         assert TENSORBOARD_LOG_DIR.parent == OUTPUT_PATH
 
 
+class TestModelLoading:
+    """Tests for model loading and resumption configuration."""
+
+    def test_load_model_importable(self):
+        from src.training.train import load_model
+
+        assert callable(load_model)
+
+    def test_load_model_raises_on_missing_file(self):
+        from src.training.train import load_model
+
+        with pytest.raises(FileNotFoundError):
+            load_model(Path('nonexistent_model.zip'))
+
+    def test_model_path_defined(self):
+        from src.training.train import MODEL_PATH
+
+        assert isinstance(MODEL_PATH, Path)
+        assert MODEL_PATH.name == 'models'
+
+    def test_module_importable_without_cli_args(self):
+        """Verify train.py module imports without argparse interfering."""
+        import src.training.train as train_module
+
+        # argparse is inside main(), so module import always works
+        assert hasattr(train_module, 'main')
+        assert hasattr(train_module, 'load_model')
+
+    def test_load_model_type_hints(self):
+        """Verify load_model has correct type annotations."""
+        import inspect
+        from src.training.train import load_model
+
+        sig = inspect.signature(load_model)
+        params = list(sig.parameters.keys())
+        assert 'checkpoint_path' in params
+        annotations = load_model.__annotations__
+        assert annotations.get('checkpoint_path') is Path
+
+    @pytest.mark.parametrize("checkpoint,expected_replay", [
+        (Path('models/solar_merchant_final.zip'),
+         Path('models/solar_merchant_final_replay_buffer.pkl')),
+        (Path('models/checkpoints/solar_merchant_100000_steps.zip'),
+         Path('models/checkpoints/solar_merchant_100000_steps_replay_buffer.pkl')),
+        (Path('models/best/best_model.zip'),
+         Path('models/best/best_model_replay_buffer.pkl')),
+    ])
+    def test_replay_buffer_path_derivation(self, checkpoint, expected_replay):
+        """Verify replay buffer path is correctly derived from checkpoint path."""
+        replay_path = checkpoint.parent / (checkpoint.stem + '_replay_buffer.pkl')
+        assert replay_path == expected_replay
+
+
 class TestCreateEnv:
     """Tests for environment creation utility."""
 

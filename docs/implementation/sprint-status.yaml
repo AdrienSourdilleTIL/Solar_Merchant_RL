@@ -66,16 +66,16 @@ development_status:
   epic-3-retrospective: optional
 
   # Epic 4: RL Training Pipeline
-  epic-4: in-progress
+  epic-4: done
   4-1-sac-agent-configuration: done
   4-2-training-loop-with-checkpoints: done
   4-3-tensorboard-logging: done
-  4-4-model-loading-and-resumption: backlog
+  4-4-model-loading-and-resumption: done
   epic-4-retrospective: optional
 
   # Epic 5: Evaluation & Showcase
-  epic-5: backlog
-  5-1-agent-evaluation-on-test-set: backlog
+  epic-5: in-progress
+  5-1-agent-evaluation-on-test-set: ready-for-dev
   5-2-baseline-comparison: backlog
   5-3-multi-seed-statistical-evaluation: backlog
   5-4-performance-visualization: backlog

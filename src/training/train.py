@@ -5,6 +5,7 @@ Uses Soft Actor-Critic (SAC) algorithm to train an agent for
 day-ahead bidding and battery management.
 """
 
+import argparse
 import random
 import sys
 import time
@@ -84,6 +85,32 @@ def create_env(data_path: Path, **config) -> SolarMerchantEnv:
     return SolarMerchantEnv(df, **config)
 
 
+def load_model(checkpoint_path: Path) -> "SAC":
+    """Load a trained SAC model from a checkpoint file.
+
+    Loads model weights for evaluation (predict). For continued training,
+    use SAC.load(path, env=env) directly or call model.set_env() after loading.
+
+    Args:
+        checkpoint_path: Path to the saved model .zip file.
+
+    Returns:
+        Loaded SAC model ready for evaluation via model.predict().
+
+    Raises:
+        FileNotFoundError: If checkpoint_path does not exist.
+    """
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    from stable_baselines3 import SAC
+
+    model = SAC.load(str(checkpoint_path))
+    print(f"Loaded model from {checkpoint_path}")
+    print(f"  Timesteps trained: {model.num_timesteps:,}")
+    return model
+
+
 def main() -> None:
     """Train a SAC agent on the solar merchant environment.
 
@@ -91,6 +118,11 @@ def main() -> None:
     environments, configures the SAC agent with hyperparameters and network
     architecture, then runs the training loop with checkpoint and eval callbacks.
     """
+    parser = argparse.ArgumentParser(description='Train Solar Merchant RL agent')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Path to checkpoint .zip file to resume training from')
+    args = parser.parse_args()
+
     # SB3 imports deferred to main() so module-level constants and set_all_seeds
     # are importable in test environments without stable_baselines3 installed.
     from stable_baselines3 import SAC
@@ -150,44 +182,66 @@ def main() -> None:
     if eval_callback:
         callbacks.append(eval_callback)
 
-    # Create SAC agent
-    policy_kwargs = dict(
-        net_arch=NET_ARCH,
-        activation_fn=ACTIVATION_FN,
-    )
+    # Create or resume SAC agent
+    is_resuming = False
 
-    print("\nInitializing SAC agent...")
-    print(f"  Learning rate: {LEARNING_RATE}")
-    print(f"  Batch size: {BATCH_SIZE}")
-    print(f"  Buffer size: {BUFFER_SIZE}")
-    print(f"  Gamma: {GAMMA}")
-    print(f"  Seed: {SEED}")
-    print(f"  Net arch: {NET_ARCH}")
-    print(f"  Activation: {ACTIVATION_FN.__name__}")
-    print(f"  Total timesteps: {TOTAL_TIMESTEPS:,}")
-    print(f"  Checkpoint freq: {CHECKPOINT_FREQ:,}")
-    print(f"  Eval freq: {EVAL_FREQ:,}")
-    print(f"  Eval episodes: {N_EVAL_EPISODES}")
-    print(f"  TensorBoard log: {TENSORBOARD_LOG_DIR}")
+    if args.resume:
+        checkpoint_path = Path(args.resume)
+        if not checkpoint_path.exists():
+            print(f"Checkpoint not found: {checkpoint_path}")
+            return
+        print(f"\nResuming training from: {checkpoint_path}")
+        model = SAC.load(str(checkpoint_path), env=train_env,
+                         tensorboard_log=str(TENSORBOARD_LOG_DIR))
+        # Attempt replay buffer restore
+        replay_path = checkpoint_path.parent / (checkpoint_path.stem + '_replay_buffer.pkl')
+        if replay_path.exists():
+            model.load_replay_buffer(str(replay_path))
+            print(f"  Replay buffer restored: {model.replay_buffer.size()} transitions")
+        else:
+            print("  No replay buffer found, starting with empty buffer")
+        print(f"  Resuming from timestep: {model.num_timesteps:,}")
+        remaining = max(0, TOTAL_TIMESTEPS - model.num_timesteps)
+        print(f"  Remaining timesteps: {remaining:,} (target: {TOTAL_TIMESTEPS:,})")
+        is_resuming = True
+    else:
+        policy_kwargs = dict(
+            net_arch=NET_ARCH,
+            activation_fn=ACTIVATION_FN,
+        )
 
-    model = SAC(
-        'MlpPolicy',
-        train_env,
-        learning_rate=LEARNING_RATE,
-        batch_size=BATCH_SIZE,
-        buffer_size=BUFFER_SIZE,
-        gamma=GAMMA,
-        tau=TAU,
-        train_freq=TRAIN_FREQ,
-        gradient_steps=GRADIENT_STEPS,
-        seed=SEED,
-        policy_kwargs=policy_kwargs,
-        verbose=1,
-        # SB3 automatically logs to TensorBoard: rollout/ep_rew_mean,
-        # rollout/ep_len_mean, train/actor_loss, train/critic_loss,
-        # train/ent_coef, train/ent_coef_loss, train/learning_rate
-        tensorboard_log=str(TENSORBOARD_LOG_DIR)
-    )
+        print("\nInitializing SAC agent...")
+        print(f"  Learning rate: {LEARNING_RATE}")
+        print(f"  Batch size: {BATCH_SIZE}")
+        print(f"  Buffer size: {BUFFER_SIZE}")
+        print(f"  Gamma: {GAMMA}")
+        print(f"  Seed: {SEED}")
+        print(f"  Net arch: {NET_ARCH}")
+        print(f"  Activation: {ACTIVATION_FN.__name__}")
+        print(f"  Total timesteps: {TOTAL_TIMESTEPS:,}")
+        print(f"  Checkpoint freq: {CHECKPOINT_FREQ:,}")
+        print(f"  Eval freq: {EVAL_FREQ:,}")
+        print(f"  Eval episodes: {N_EVAL_EPISODES}")
+        print(f"  TensorBoard log: {TENSORBOARD_LOG_DIR}")
+
+        model = SAC(
+            'MlpPolicy',
+            train_env,
+            learning_rate=LEARNING_RATE,
+            batch_size=BATCH_SIZE,
+            buffer_size=BUFFER_SIZE,
+            gamma=GAMMA,
+            tau=TAU,
+            train_freq=TRAIN_FREQ,
+            gradient_steps=GRADIENT_STEPS,
+            seed=SEED,
+            policy_kwargs=policy_kwargs,
+            verbose=1,
+            # SB3 automatically logs to TensorBoard: rollout/ep_rew_mean,
+            # rollout/ep_len_mean, train/actor_loss, train/critic_loss,
+            # train/ent_coef, train/ent_coef_loss, train/learning_rate
+            tensorboard_log=str(TENSORBOARD_LOG_DIR)
+        )
 
     # Train
     print("\nStarting training...")
@@ -200,7 +254,8 @@ def main() -> None:
         model.learn(
             total_timesteps=TOTAL_TIMESTEPS,
             callback=callbacks,
-            progress_bar=True
+            progress_bar=True,
+            reset_num_timesteps=not is_resuming,
         )
     except KeyboardInterrupt:
         print("\nTraining interrupted by user.")
@@ -212,9 +267,19 @@ def main() -> None:
     print(f"Timesteps completed: {model.num_timesteps:,} / {TOTAL_TIMESTEPS:,}")
 
     # Save final model
+    # No VecNormalize statistics to save — observations are normalized internally
+    # by SolarMerchantEnv (see architecture.md, internal normalization decision)
     final_model_path = MODEL_PATH / 'solar_merchant_final.zip'
     model.save(str(final_model_path))
     print(f"\nModel saved to {final_model_path}")
+
+    # Save replay buffer alongside model for future training resumption
+    replay_buffer_path = MODEL_PATH / 'solar_merchant_final_replay_buffer.pkl'
+    try:
+        model.save_replay_buffer(str(replay_buffer_path))
+        print(f"Replay buffer saved to {replay_buffer_path}")
+    except Exception as e:
+        print(f"Warning: Failed to save replay buffer: {e}")
 
     print("\nTraining complete!")
     print("Run evaluate_baselines.py or evaluate.py for proper evaluation.")
