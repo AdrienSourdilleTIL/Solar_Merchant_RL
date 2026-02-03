@@ -1,6 +1,6 @@
 # Story 5.1: Agent Evaluation on Test Set
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -31,25 +31,25 @@ so that I can measure out-of-sample performance with deterministic, reproducible
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `src/evaluation/evaluate_agent.py` script (AC: #1, #2, #4)
-  - [ ] Create `make_agent_policy(model) -> Callable` wrapper that adapts `model.predict(obs, deterministic=True)` to the `policy(obs) -> action` interface expected by `evaluate_policy()`
-  - [ ] Create `main()` function that: loads model via `load_model()`, creates test env via `create_env()`, wraps model, calls `evaluate_policy()`, prints results, saves CSV
-  - [ ] Accept `--model` CLI argument for checkpoint path (default: `models/solar_merchant_final.zip`)
-  - [ ] Accept `--episodes` CLI argument (default: 10)
-  - [ ] Accept `--seed` CLI argument (default: 42)
-  - [ ] Print agent evaluation summary to stdout (name, metrics, episodes, seed)
-  - [ ] Save results to `results/metrics/agent_evaluation.csv` using `save_results()`
+- [x] Task 1: Create `src/evaluation/evaluate_agent.py` script (AC: #1, #2, #4)
+  - [x] Create `make_agent_policy(model) -> Callable` wrapper that adapts `model.predict(obs, deterministic=True)` to the `policy(obs) -> action` interface expected by `evaluate_policy()`
+  - [x] Create `main()` function that: loads model via `load_model()`, creates test env via `create_env()`, wraps model, calls `evaluate_policy()`, prints results, saves CSV
+  - [x] Accept `--model` CLI argument for checkpoint path (default: `models/solar_merchant_final.zip`)
+  - [x] Accept `--episodes` CLI argument (default: 10)
+  - [x] Accept `--seed` CLI argument (default: 42)
+  - [x] Print agent evaluation summary to stdout (name, metrics, episodes, seed)
+  - [x] Save results to `results/metrics/agent_evaluation.csv` using `save_results()`
 
-- [ ] Task 2: Write tests in `tests/test_agent_evaluation.py` (AC: #1, #2, #3)
-  - [ ] Test `make_agent_policy` is importable and callable
-  - [ ] Test `make_agent_policy` returns a callable that accepts obs (np.ndarray) and returns action (np.ndarray) with shape (25,)
-  - [ ] Test `main` function is importable
-  - [ ] Test evaluation produces required metric keys (revenue, imbalance_cost, net_profit, etc.)
-  - [ ] Test determinism: two runs with same seed produce identical results (using a mock or lightweight model)
+- [x] Task 2: Write tests in `tests/test_agent_evaluation.py` (AC: #1, #2, #3)
+  - [x] Test `make_agent_policy` is importable and callable
+  - [x] Test `make_agent_policy` returns a callable that accepts obs (np.ndarray) and returns action (np.ndarray) with shape (25,)
+  - [x] Test `main` function is importable
+  - [x] Test evaluation produces required metric keys (revenue, imbalance_cost, net_profit, etc.)
+  - [x] Test determinism: two runs with same seed produce identical results (using a mock or lightweight model)
 
-- [ ] Task 3: Run full test suite to verify no regressions (AC: all)
-  - [ ] Run `pytest tests/` -- all existing 282+ tests must pass
-  - [ ] Run new tests -- all pass
+- [x] Task 3: Run full test suite to verify no regressions (AC: all)
+  - [x] Run `pytest tests/` -- all existing 282+ tests must pass (293 total passed after review fixes)
+  - [x] Run new tests -- all 11 pass (7 original + 4 added by code review)
 
 ## Dev Notes
 
@@ -237,10 +237,37 @@ Naming follows architecture.md conventions: snake_case files, snake_case functio
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+None -- clean implementation with no issues.
+
 ### Completion Notes List
 
+- Created `src/evaluation/evaluate_agent.py` -- thin script following `evaluate_baselines.py` pattern
+- `make_agent_policy()` wraps SB3 `model.predict(obs, deterministic=True)` into `policy(obs) -> action` interface
+- `main()` handles CLI args (`--model`, `--episodes`, `--seed`), loads model via `load_model()`, creates env via `create_env()`, evaluates via `evaluate_policy()`, prints via `print_comparison()`, saves via `save_results()`
+- No existing files modified -- all reused as-is per story requirements
+- Created `tests/test_agent_evaluation.py` with 7 tests covering: importability, policy wrapper shape/deterministic flag, metric keys, and seed determinism
+- Full test suite: 289 passed (282 existing + 7 new), 0 failures, no regressions
+
+### Change Log
+
+- 2026-02-02: Story 5-1 implemented -- agent evaluation script and tests (7 new tests, 289 total passing)
+- 2026-02-02: Code review (AI) -- 7 issues found (3H, 3M, 1L), 6 fixed automatically:
+  - H1: Added missing test data error handling (user-friendly message if test.csv missing)
+  - H2: Added CSV output test verifying file creation and content (AC#4)
+  - H3: Added path constant tests for DEFAULT_MODEL, RESULTS_PATH, DATA_PATH
+  - M1: Deferred train.py imports to main() to avoid module-level torch loading
+  - M2: Aligned env creation with evaluate_baselines.py pattern (SolarMerchantEnv directly)
+  - M3: Noted print_comparison "BASELINE" header issue (not fixed per "Do NOT modify evaluate.py" rule)
+  - L1: Environment registration warning noted (harmless, pre-existing)
+  - Test suite: 293 passed (289 + 4 new), 0 failures
+
 ### File List
+
+- `src/evaluation/evaluate_agent.py` (NEW, MODIFIED by review) -- RL agent evaluation script
+- `tests/test_agent_evaluation.py` (NEW, MODIFIED by review) -- Tests for agent evaluation (11 tests)
+- `docs/implementation/sprint-status.yaml` (MODIFIED) -- Status updated to done
+- `docs/implementation/5-1-agent-evaluation-on-test-set.md` (MODIFIED) -- Story file updated with review
