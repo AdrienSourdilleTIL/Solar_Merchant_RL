@@ -1,6 +1,7 @@
 """Visualize evaluation results for Solar Merchant RL.
 
-Generates performance comparison charts from pre-computed evaluation CSVs.
+Generates performance comparison charts from pre-computed evaluation CSVs
+and training curves from TensorBoard logs.
 Outputs publication-quality PNG figures for README embedding.
 """
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 RESULTS_PATH = Path(__file__).parent.parent.parent / 'results'
 DEFAULT_METRICS = RESULTS_PATH / 'metrics'
 DEFAULT_FIGURES = RESULTS_PATH / 'figures'
+DEFAULT_TENSORBOARD = Path(__file__).parent.parent.parent / 'outputs' / 'tensorboard'
 
 
 def load_comparison_data(metrics_dir: Path) -> pd.DataFrame:
@@ -59,6 +61,211 @@ def load_comparison_data(metrics_dir: Path) -> pd.DataFrame:
         "  python src/evaluation/evaluate_agent.py\n"
         "  python src/evaluation/evaluate_multi_seed.py"
     )
+
+
+def load_tensorboard_data(log_dir: Path, all_runs: bool = False) -> pd.DataFrame:
+    """Load training metrics from TensorBoard event files.
+
+    Reads SAC run directories and extracts episode reward scalars for
+    training curve visualization.
+
+    Args:
+        log_dir: Path to TensorBoard log directory (e.g., outputs/tensorboard).
+        all_runs: If True, load all runs and include 'run' column for labels.
+            If False (default), load only the most recent run.
+
+    Returns:
+        DataFrame with columns: step, value (episode reward).
+        If all_runs=True, also includes 'run' column with run names.
+
+    Raises:
+        FileNotFoundError: If no TensorBoard logs found with helpful message.
+    """
+    from tensorboard.backend.event_processing import event_accumulator
+
+    # Find run directories
+    run_dirs = sorted(log_dir.glob('SAC_*'), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not run_dirs:
+        raise FileNotFoundError(
+            f"No TensorBoard logs found in {log_dir}.\n"
+            "Run training first:\n"
+            "  python src/training/train.py"
+        )
+
+    # Select which runs to load
+    dirs_to_load = run_dirs if all_runs else [run_dirs[0]]
+
+    all_data = []
+    for run_dir in dirs_to_load:
+        event_files = list(run_dir.glob('events.out.tfevents.*'))
+        if not event_files:
+            if not all_runs:
+                raise FileNotFoundError(
+                    f"No event files found in {run_dir}.\n"
+                    "Run training first:\n"
+                    "  python src/training/train.py"
+                )
+            continue  # Skip empty runs when loading all
+
+        # Load event accumulator
+        ea = event_accumulator.EventAccumulator(str(run_dir))
+        ea.Reload()
+
+        # Extract rollout/ep_rew_mean scalar
+        try:
+            scalars = ea.Scalars('rollout/ep_rew_mean')
+        except KeyError:
+            if not all_runs:
+                raise FileNotFoundError(
+                    f"No 'rollout/ep_rew_mean' scalar found in {run_dir}.\n"
+                    "This may indicate an incomplete training run."
+                )
+            continue  # Skip runs without the scalar when loading all
+
+        run_name = run_dir.name
+        for s in scalars:
+            row = {'step': s.step, 'value': s.value}
+            if all_runs:
+                row['run'] = run_name
+            all_data.append(row)
+
+    if not all_data:
+        raise FileNotFoundError(
+            f"No valid TensorBoard data found in {log_dir}.\n"
+            "Run training first:\n"
+            "  python src/training/train.py"
+        )
+
+    return pd.DataFrame(all_data)
+
+
+def smooth_data(values: pd.Series, weight: float = 0.9) -> pd.Series:
+    """Apply exponential moving average smoothing.
+
+    Args:
+        values: Raw values to smooth.
+        weight: Smoothing weight (0-1, higher = smoother). Default 0.9.
+            Weight of 0 returns original values, 1 returns constant.
+
+    Returns:
+        Smoothed values as pandas Series.
+
+    Raises:
+        ValueError: If weight is not in [0, 1] range.
+    """
+    if not 0.0 <= weight <= 1.0:
+        raise ValueError(f"Smoothing weight must be in [0, 1], got {weight}")
+
+    if len(values) == 0:
+        return values.copy()
+
+    if weight == 0.0:
+        return values.copy()
+
+    smoothed = []
+    last = None
+    for v in values:
+        # Handle NaN: skip NaN values, keep last valid smoothed value
+        if pd.isna(v):
+            smoothed.append(v)  # Preserve NaN in output
+            continue
+        if last is None:
+            last = v
+        smoothed_val = last * weight + (1 - weight) * v
+        smoothed.append(smoothed_val)
+        last = smoothed_val
+    return pd.Series(smoothed)
+
+
+def plot_training_curves(
+    df: pd.DataFrame,
+    output_path: Path | None = None,
+    backend: str = 'Agg',
+    smoothing: float = 0.9,
+) -> matplotlib.figure.Figure:
+    """Generate training reward curve chart.
+
+    Creates a publication-quality line chart showing episode reward
+    over training steps. Optionally applies smoothing with raw data
+    as light background.
+
+    Args:
+        df: DataFrame with 'step' and 'value' columns.
+        output_path: Path to save PNG. If None, not saved.
+        backend: Matplotlib backend. Default 'Agg' for headless.
+        smoothing: EMA smoothing weight (0 = no smoothing, 1 = full). Default 0.9.
+
+    Returns:
+        Matplotlib Figure object.
+
+    Raises:
+        ValueError: If DataFrame is empty or missing required columns.
+    """
+    if df.empty:
+        raise ValueError(
+            "Cannot plot training curves: DataFrame is empty.\n"
+            "This may indicate incomplete training logs."
+        )
+    if 'step' not in df.columns or 'value' not in df.columns:
+        raise ValueError(
+            f"DataFrame must have 'step' and 'value' columns, got: {list(df.columns)}"
+        )
+
+    import matplotlib
+    matplotlib.use(backend)
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Check if multiple runs (has 'run' column)
+    has_multiple_runs = 'run' in df.columns and df['run'].nunique() > 1
+
+    if has_multiple_runs:
+        # Plot each run with different colors
+        colors = plt.cm.tab10.colors
+        runs = df['run'].unique()
+        for i, run_name in enumerate(runs):
+            run_data = df[df['run'] == run_name]
+            color = colors[i % len(colors)]
+
+            # Plot raw data as light background
+            ax.plot(run_data['step'], run_data['value'], alpha=0.2, color=color, linewidth=0.5)
+
+            # Plot smoothed line
+            if smoothing > 0:
+                smoothed = smooth_data(run_data['value'].reset_index(drop=True), smoothing)
+                ax.plot(run_data['step'], smoothed.values, color=color, linewidth=2, label=run_name)
+            else:
+                ax.plot(run_data['step'], run_data['value'], color=color, linewidth=2, label=run_name)
+    else:
+        # Single run plotting (original behavior)
+        # Plot raw data as light background
+        ax.plot(df['step'], df['value'], alpha=0.3, color='#2196F3', linewidth=0.5)
+
+        # Plot smoothed line (or raw if no smoothing)
+        if smoothing > 0:
+            smoothed = smooth_data(df['value'], smoothing)
+            ax.plot(df['step'], smoothed, color='#2196F3', linewidth=2, label='Episode Reward')
+        else:
+            ax.plot(df['step'], df['value'], color='#2196F3', linewidth=2, label='Episode Reward')
+
+    ax.set_xlabel('Training Steps', fontsize=12)
+    ax.set_ylabel('Episode Reward (EUR)', fontsize=12)
+    title = 'SAC Training Progress — Episode Reward over Time'
+    if has_multiple_runs:
+        title = 'SAC Training Progress — All Runs Comparison'
+    ax.set_title(title, fontsize=14)
+    ax.grid(alpha=0.3)
+    ax.legend(loc='lower right', fontsize=10)
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {output_path}")
+
+    return fig
 
 
 def plot_net_profit_comparison(
@@ -163,29 +370,61 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='Generate performance charts')
     parser.add_argument('--metrics-dir', type=str, default=str(DEFAULT_METRICS))
     parser.add_argument('--output-dir', type=str, default=str(DEFAULT_FIGURES))
+    parser.add_argument('--tensorboard-dir', type=str, default=str(DEFAULT_TENSORBOARD),
+                        help='Path to TensorBoard logs directory')
     parser.add_argument('--show', action='store_true', help='Display chart interactively')
+    parser.add_argument('--training-curves', action='store_true',
+                        help='Generate training curves chart from TensorBoard logs')
+    parser.add_argument('--all-runs', action='store_true',
+                        help='Plot all training runs with labels (default: most recent only)')
+    parser.add_argument('--performance', action='store_true',
+                        help='Generate performance comparison chart')
+    parser.add_argument('--all', action='store_true', help='Generate all charts')
     args = parser.parse_args()
 
     metrics_dir = Path(args.metrics_dir)
     output_dir = Path(args.output_dir)
+    tensorboard_dir = Path(args.tensorboard_dir)
 
-    try:
-        df = load_comparison_data(metrics_dir)
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = output_dir / 'performance_comparison.png'
+    # Default: generate performance comparison if no specific flag
+    if not args.training_curves and not args.performance and not args.all:
+        args.performance = True
 
     # Choose backend based on --show flag
     backend = 'TkAgg' if args.show else 'Agg'
-    fig = plot_net_profit_comparison(df, output_path, backend=backend)
 
     import matplotlib.pyplot as plt
+    figures = []
+
+    # Generate performance comparison chart
+    if args.performance or args.all:
+        try:
+            df = load_comparison_data(metrics_dir)
+            output_path = output_dir / 'performance_comparison.png'
+            fig = plot_net_profit_comparison(df, output_path, backend=backend)
+            figures.append(fig)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            if not args.all:
+                sys.exit(1)
+
+    # Generate training curves chart
+    if args.training_curves or args.all:
+        try:
+            df = load_tensorboard_data(tensorboard_dir, all_runs=args.all_runs)
+            output_path = output_dir / 'training_curves.png'
+            fig = plot_training_curves(df, output_path, backend=backend)
+            figures.append(fig)
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            if not args.all:
+                sys.exit(1)
+
     if args.show:
         plt.show()
     else:
-        plt.close(fig)
+        for fig in figures:
+            plt.close(fig)
 
 
 if __name__ == '__main__':
