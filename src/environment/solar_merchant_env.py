@@ -527,26 +527,23 @@ class SolarMerchantEnv(gym.Env):
         committed = self.todays_commitments[hour]
         delivered = available_energy  # We deliver whatever we have
 
-        # Calculate revenue and imbalance
-        # Revenue for delivered energy at day-ahead price
-        revenue = delivered * price
-        self.episode_revenue += revenue
-
-        # Imbalance settlement
-        # NOTE: Revenue already paid at day-ahead price for delivered amount
-        # Imbalance cost represents additional penalties/adjustments
+        # Calculate revenue and imbalance using correct market settlement
+        # In real markets: you get paid DA price for your COMMITMENT,
+        # then imbalance is settled separately at imbalance prices
         imbalance = delivered - committed
-        if imbalance < 0:
-            # Short: under-delivered, pay penalty at short price
-            # Total cost = committed * price (already in revenue) + shortage * price_short
-            # We already got revenue for delivered, so we owe: shortage * price_short
-            imbalance_cost = abs(imbalance) * price_short
+
+        if imbalance >= 0:
+            # Long position: over-delivered
+            # Revenue = DA price for commitment + imbalance price for excess
+            revenue = committed * price + imbalance * price_long
+            imbalance_cost = 0.0
         else:
-            # Long: over-delivered, receive long price instead of DA price for excess
-            # Total revenue = committed * price + excess * price_long (not price)
-            # Since we already counted delivered * price in revenue,
-            # we need to subtract the excess that should have been at long price
-            imbalance_cost = imbalance * (price - price_long)
+            # Short position: under-delivered
+            # Revenue = DA price for commitment - cost to cover shortage
+            revenue = committed * price
+            imbalance_cost = abs(imbalance) * price_short
+
+        self.episode_revenue += revenue
 
         self.episode_imbalance_cost += imbalance_cost
 

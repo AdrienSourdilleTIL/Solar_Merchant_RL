@@ -33,7 +33,7 @@ FORECAST_ERROR_STD: float = 0.15  # 15% of actual production
 # When short (under-delivered): pay premium to buy balancing energy
 # When long (over-delivered): receive discount for excess energy
 IMBALANCE_SHORT_MULTIPLIER: float = 1.5  # Pay 1.5x day-ahead price when short
-IMBALANCE_LONG_MULTIPLIER: float = 0.6   # Receive 0.6x day-ahead price when long
+IMBALANCE_LONG_MULTIPLIER: float = 0.3   # Receive 0.3x day-ahead price when long (realistic for solar peaks)
 
 # Validation range constants
 PRICE_MIN_EUR_MWH: float = -500.0  # Allow negative prices during oversupply
@@ -250,9 +250,8 @@ def generate_pv_forecast(actual: pd.Series, std_frac: float = FORECAST_ERROR_STD
         noise[i] = 0.8 * noise[i-1] + np.sqrt(1 - 0.8**2) * np.random.normal(0, 1)
 
     # Scale noise by production level (no error when production is 0)
-    # Add small positive bias (forecasts tend to be optimistic)
-    max_production = actual.max()
-    error = noise * std_frac * actual + 0.02 * max_production * (actual > 0)
+    # Unbiased forecast - errors are symmetric around actual
+    error = noise * std_frac * actual
 
     # Forecast = actual + error, but clipped to [0, capacity]
     forecast = actual + error
