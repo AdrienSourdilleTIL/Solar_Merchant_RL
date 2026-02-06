@@ -29,7 +29,9 @@
       "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" log --oneline -5)",
       "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" log --oneline --name-only -1)",
       "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" diff HEAD~1 src/environment/solar_merchant_env.py)",
-      "mcp__filesystem__create_directory"
+      "mcp__filesystem__create_directory",
+      "Bash(timeout:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
