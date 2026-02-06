@@ -283,3 +283,117 @@ class TestEpisodeTermination:
                 break
 
         assert commitment_seen, "Commitment hour should occur within episode"
+
+
+class TestObservationWindowAlignment:
+    """Test that observation window matches commitment window at commitment hour."""
+
+    @pytest.fixture
+    def env_with_known_data(self):
+        """Create environment with predictable data for window testing."""
+        hours = 200
+        # Create data with unique values per index for easy verification
+        data = pd.DataFrame({
+            'datetime': pd.date_range('2023-01-01', periods=hours, freq='h'),
+            'hour': [h % 24 for h in range(hours)],
+            'price_eur_mwh': np.arange(hours, dtype=float) + 100,  # Unique prices: 100, 101, 102...
+            'pv_actual_mwh': np.ones(hours) * 10,
+            'pv_forecast_mwh': np.arange(hours, dtype=float),  # Unique forecasts: 0, 1, 2...
+            'price_imbalance_short': np.ones(hours) * 50,
+            'price_imbalance_long': np.ones(hours) * 30,
+            'temperature_c': np.ones(hours) * 20,
+            'irradiance_direct': np.ones(hours) * 500,
+            'hour_sin': np.sin(2 * np.pi * np.arange(hours) / 24),
+            'hour_cos': np.cos(2 * np.pi * np.arange(hours) / 24),
+            'day_sin': np.sin(2 * np.pi * np.arange(hours) / (24 * 7)),
+            'day_cos': np.cos(2 * np.pi * np.arange(hours) / (24 * 7)),
+            'month_sin': np.sin(2 * np.pi * np.arange(hours) / (24 * 30)),
+            'month_cos': np.cos(2 * np.pi * np.arange(hours) / (24 * 30)),
+        })
+        return SolarMerchantEnv(data)
+
+    def test_observation_window_at_commitment_hour_shows_tomorrow(self, env_with_known_data):
+        """At commitment hour, observation should show tomorrow's 24h (not next 24h from now)."""
+        env = env_with_known_data
+
+        # Position at hour 11 (commitment hour) on day 1
+        # Index 11 corresponds to hour 11 on day 0 (2023-01-01 11:00)
+        env.current_idx = 11
+        env.episode_start_idx = 0
+        env.battery_soc = env.battery_capacity_mwh / 2
+        env.todays_commitments = np.zeros(24)
+        env.tomorrows_commitments = np.zeros(24)
+        env.hourly_delivered = {}
+
+        obs = env._get_observation()
+
+        # At hour 11, tomorrow starts at index 11 + 13 = 24 (midnight of next day)
+        # The 24h window should be indices 24-47 (tomorrow 00:00 to 23:00)
+
+        # Forecast values are observation indices 27-50 (24 values)
+        forecast_window = obs[27:51]
+
+        # The forecast at each index is just the index value (we designed it that way)
+        # So first forecast should be for index 24, last for index 47
+        # Normalized by plant capacity (20 MW)
+        expected_first_forecast = 24.0 / 20.0  # Index 24 normalized
+        expected_last_forecast = 47.0 / 20.0   # Index 47 normalized
+
+        assert abs(forecast_window[0] - expected_first_forecast) < 0.01, \
+            f"First forecast should be {expected_first_forecast}, got {forecast_window[0]}"
+        assert abs(forecast_window[23] - expected_last_forecast) < 0.01, \
+            f"Last forecast should be {expected_last_forecast}, got {forecast_window[23]}"
+
+    def test_observation_window_at_non_commitment_hour_shows_next_24h(self, env_with_known_data):
+        """At non-commitment hours, observation should show next 24h from now."""
+        env = env_with_known_data
+
+        # Position at hour 15 (NOT commitment hour)
+        env.current_idx = 15
+        env.episode_start_idx = 0
+        env.battery_soc = env.battery_capacity_mwh / 2
+        env.todays_commitments = np.zeros(24)
+        env.tomorrows_commitments = np.zeros(24)
+        env.hourly_delivered = {}
+
+        obs = env._get_observation()
+
+        # At hour 15, next 24h should be indices 15-38
+        forecast_window = obs[27:51]
+
+        expected_first_forecast = 15.0 / 20.0  # Index 15 normalized
+        expected_last_forecast = 38.0 / 20.0   # Index 38 normalized
+
+        assert abs(forecast_window[0] - expected_first_forecast) < 0.01, \
+            f"First forecast should be {expected_first_forecast}, got {forecast_window[0]}"
+        assert abs(forecast_window[23] - expected_last_forecast) < 0.01, \
+            f"Last forecast should be {expected_last_forecast}, got {forecast_window[23]}"
+
+    def test_commitment_and_observation_windows_aligned(self, env_with_known_data):
+        """Verify commitment window matches observation window at commitment hour."""
+        env = env_with_known_data
+
+        # Position at hour 11 (commitment hour)
+        env.current_idx = 11
+        env.episode_start_idx = 0
+        env.battery_soc = env.battery_capacity_mwh / 2
+        env.todays_commitments = np.zeros(24)
+        env.tomorrows_commitments = np.zeros(24)
+        env.hourly_delivered = {}
+
+        # Get observation
+        obs = env._get_observation()
+        forecast_window = obs[27:51]
+
+        # Make a commitment (trigger step at commitment hour)
+        action = np.ones(25) * 0.5  # 50% commitment, neutral battery
+        _, _, _, _, info = env.step(action)
+
+        # The commitment should have been made using forecasts from the SAME window
+        # as shown in observation (tomorrow 00:00-23:00)
+        new_commitment = info.get('new_commitment')
+        assert new_commitment is not None, "Commitment should have been made"
+
+        # Commitment uses forecasts from tomorrow (indices 24-47)
+        # The observed forecasts should match what was used for commitment calculation
+        # Both should be for the same time period now

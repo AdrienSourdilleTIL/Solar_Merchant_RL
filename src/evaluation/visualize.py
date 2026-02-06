@@ -61,17 +61,25 @@ def load_comparison_data(metrics_dir: Path) -> pd.DataFrame:
     )
 
 
-def plot_net_profit_comparison(df: pd.DataFrame, output_path: Path) -> None:
+def plot_net_profit_comparison(
+    df: pd.DataFrame,
+    output_path: Path | None = None,
+    backend: str = 'Agg',
+) -> matplotlib.figure.Figure:
     """Generate bar chart comparing net profit across policies.
 
     Args:
         df: DataFrame with policy names and net_profit values.
             Supports both plain columns (net_profit) and
             multi-seed columns (net_profit_mean, net_profit_std).
-        output_path: Path to save PNG file.
+        output_path: Path to save PNG file. If None, figure is not saved.
+        backend: Matplotlib backend to use. Default 'Agg' for headless.
+
+    Returns:
+        The matplotlib Figure object (for testing or interactive display).
     """
     import matplotlib
-    matplotlib.use('Agg')
+    matplotlib.use(backend)
     import matplotlib.pyplot as plt
 
     # Detect columns
@@ -86,11 +94,14 @@ def plot_net_profit_comparison(df: pd.DataFrame, output_path: Path) -> None:
 
     # Color: highlight RL agent differently
     colors = []
+    labels = []
     for p in policies:
         if 'rl' in p.lower() or 'sac' in p.lower() or 'agent' in p.lower():
             colors.append('#2196F3')  # Blue for RL agent
+            labels.append('RL Agent')
         else:
             colors.append('#9E9E9E')  # Grey for baselines
+            labels.append('Baseline')
 
     fig, ax = plt.subplots(figsize=(10, 6))
     bars = ax.bar(
@@ -106,28 +117,45 @@ def plot_net_profit_comparison(df: pd.DataFrame, output_path: Path) -> None:
     ax.set_xticks(range(len(policies)))
     ax.set_xticklabels(policies, rotation=15, ha='right', fontsize=11)
     ax.set_ylabel('Net Profit (EUR / episode)', fontsize=12)
-    ax.set_title('RL Agent vs Baseline Policies \u2014 Net Profit Comparison', fontsize=14)
+    ax.set_title('RL Agent vs Baseline Policies — Net Profit Comparison', fontsize=14)
     ax.axhline(y=0, color='black', linewidth=0.5, linestyle='--')
     ax.grid(axis='y', alpha=0.3)
+
+    # Add legend for color coding
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#2196F3', edgecolor='black', label='RL Agent'),
+        Patch(facecolor='#9E9E9E', edgecolor='black', label='Baseline'),
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
 
     # Value labels on bars
     for bar, val in zip(bars, values):
         y_pos = bar.get_height()
-        offset = 50 if y_pos >= 0 else -150
+        # For positive bars: label above; for negative bars: label below
+        if y_pos >= 0:
+            offset = 5
+            va = 'bottom'
+        else:
+            offset = -5
+            va = 'top'
         ax.annotate(
             f'EUR {val:,.0f}',
             xy=(bar.get_x() + bar.get_width() / 2, y_pos),
-            xytext=(0, offset if y_pos >= 0 else -offset),
+            xytext=(0, offset),
             textcoords='offset points',
-            ha='center', va='bottom' if y_pos >= 0 else 'top',
+            ha='center', va=va,
             fontsize=9, fontweight='bold',
         )
 
     fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved: {output_path}")
+
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=150, bbox_inches='tight')
+        print(f"Saved: {output_path}")
+
+    return fig
 
 
 def main() -> None:
@@ -148,15 +176,16 @@ def main() -> None:
         sys.exit(1)
 
     output_path = output_dir / 'performance_comparison.png'
-    plot_net_profit_comparison(df, output_path)
 
+    # Choose backend based on --show flag
+    backend = 'TkAgg' if args.show else 'Agg'
+    fig = plot_net_profit_comparison(df, output_path, backend=backend)
+
+    import matplotlib.pyplot as plt
     if args.show:
-        import matplotlib
-        matplotlib.use('TkAgg')
-        import matplotlib.pyplot as plt
-        df_reload = load_comparison_data(metrics_dir)
-        plot_net_profit_comparison(df_reload, output_path)
         plt.show()
+    else:
+        plt.close(fig)
 
 
 if __name__ == '__main__':

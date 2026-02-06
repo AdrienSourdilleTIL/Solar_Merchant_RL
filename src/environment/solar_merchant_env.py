@@ -226,12 +226,16 @@ class SolarMerchantEnv(gym.Env):
         1      | 1    | Battery SOC            | [0, 1]       | soc / capacity
         2-25   | 24   | Today's commitments    | [0, 1]       | commit / plant_cap
         26     | 1    | Cumulative imbalance   | [-1, 1]      | imbalance / plant_cap
-        27-50  | 24   | PV forecast (24h)      | [0, 1]       | forecast / plant_cap
-        51-74  | 24   | Prices (24h)           | normalized   | price / max_abs_price
+        27-50  | 24   | PV forecast (24h)*     | [0, 1]       | forecast / plant_cap
+        51-74  | 24   | Prices (24h)*          | normalized   | price / max_abs_price
         75     | 1    | Current actual PV      | [0, 1]       | pv / plant_cap
         76     | 1    | Temperature            | normalized   | temp / max_abs_temp
         77     | 1    | Irradiance             | normalized   | irr / max_irr
         78-83  | 6    | Cyclical time features | [-1, 1]      | sin/cos encoding
+
+        *At commitment hour (11:00), forecast/price window shows TOMORROW's 24h
+        (00:00-23:00) to match the commitment period. At other hours, shows next
+        24h from current time for operational decisions.
 
         Cyclical time features (indices 78-83):
         - hour_sin, hour_cos: Hour of day (24-hour cycle)
@@ -264,18 +268,31 @@ class SolarMerchantEnv(gym.Env):
             >>> print(f"Battery SOC: {obs[1] * env.battery_capacity_mwh:.1f} MWh")
         """
         row = self.data.iloc[self.current_idx]
-        hour = row['hour']
+        hour = int(row['hour'])
 
-        # Get next 24 hours of forecasts/prices (pad with zeros if near end)
+        # Determine window offset based on whether we're at commitment hour
+        # At commitment hour: show tomorrow's 24h (what we're committing to)
+        # At other hours: show next 24h from now (for operational decisions)
+        if hour == self.commitment_hour:
+            # Tomorrow starts at hours_until_midnight from now
+            hours_until_midnight = (24 - hour) % 24
+            if hours_until_midnight == 0:
+                hours_until_midnight = 24
+            window_start = hours_until_midnight  # Tomorrow 00:00
+        else:
+            window_start = 0  # Next 24h from now
+
+        # Get 24 hours of forecasts/prices starting from window_start
         forecast_window = []
         price_window = []
         for i in range(24):
-            if self.current_idx + i < len(self.data):
+            idx = self.current_idx + window_start + i
+            if idx < len(self.data):
                 forecast_window.append(
-                    self.data.iloc[self.current_idx + i]['pv_forecast_mwh'] / self.norm_factors['pv']
+                    self.data.iloc[idx]['pv_forecast_mwh'] / self.norm_factors['pv']
                 )
                 price_window.append(
-                    self.data.iloc[self.current_idx + i]['price_eur_mwh'] / self.norm_factors['price']
+                    self.data.iloc[idx]['price_eur_mwh'] / self.norm_factors['price']
                 )
             else:
                 forecast_window.append(0.0)

@@ -143,6 +143,60 @@ class TestPlotNetProfitComparison:
         assert out.exists()
         assert out.stat().st_size > 0
 
+    def test_returns_figure_object(self, synthetic_multi_seed_csv):
+        """Test that plot function returns a matplotlib Figure."""
+        from src.evaluation.visualize import load_comparison_data, plot_net_profit_comparison
+        import matplotlib.figure
+        df = load_comparison_data(synthetic_multi_seed_csv)
+        fig = plot_net_profit_comparison(df, output_path=None)
+        assert isinstance(fig, matplotlib.figure.Figure)
+
+    def test_chart_has_required_elements(self, synthetic_multi_seed_csv):
+        """Test chart has title, ylabel, and legend (AC #3 publication quality)."""
+        from src.evaluation.visualize import load_comparison_data, plot_net_profit_comparison
+        import matplotlib.pyplot as plt
+        df = load_comparison_data(synthetic_multi_seed_csv)
+        fig = plot_net_profit_comparison(df, output_path=None)
+        ax = fig.axes[0]
+
+        # Check title
+        assert 'Net Profit' in ax.get_title()
+
+        # Check y-axis label
+        assert 'EUR' in ax.get_ylabel()
+
+        # Check legend exists
+        legend = ax.get_legend()
+        assert legend is not None
+        legend_texts = [t.get_text() for t in legend.get_texts()]
+        assert 'RL Agent' in legend_texts
+        assert 'Baseline' in legend_texts
+
+        # Check correct number of bars
+        bars = [p for p in ax.patches if hasattr(p, 'get_height')]
+        assert len(bars) == len(df)
+
+        plt.close(fig)
+
+    def test_chart_bars_have_distinct_colors(self, synthetic_multi_seed_csv):
+        """Test RL agent bar is highlighted differently from baselines."""
+        from src.evaluation.visualize import load_comparison_data, plot_net_profit_comparison
+        import matplotlib.pyplot as plt
+        df = load_comparison_data(synthetic_multi_seed_csv)
+        fig = plot_net_profit_comparison(df, output_path=None)
+        ax = fig.axes[0]
+
+        bars = [p for p in ax.patches if hasattr(p, 'get_height')]
+        colors = [bar.get_facecolor() for bar in bars]
+
+        # First bar (RL Agent) should have different color than others
+        rl_color = colors[0]
+        baseline_colors = colors[1:]
+        # RL agent should be blue-ish, baselines grey-ish (different)
+        assert rl_color != baseline_colors[0]
+
+        plt.close(fig)
+
 
 class TestMain:
     """Tests for main function importability."""

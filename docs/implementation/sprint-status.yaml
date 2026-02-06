@@ -78,7 +78,7 @@ development_status:
   5-1-agent-evaluation-on-test-set: done
   5-2-baseline-comparison: done
   5-3-multi-seed-statistical-evaluation: done
-  5-4-performance-visualization: review
+  5-4-performance-visualization: done
   5-5-training-curves-visualization: backlog
   5-6-export-for-readme: backlog
   epic-5-retrospective: optional
