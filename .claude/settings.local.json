@@ -31,7 +31,8 @@
       "Bash(git -C \"c:/Users/AdrienSourdille/Solar_Merchant_RL\" diff HEAD~1 src/environment/solar_merchant_env.py)",
       "mcp__filesystem__create_directory",
       "Bash(timeout:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "mcp__filesystem__search_files"
     ]
   }
 }
