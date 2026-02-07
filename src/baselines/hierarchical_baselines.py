@@ -19,7 +19,7 @@ Battery Policies:
 import numpy as np
 from typing import Callable
 
-from src.environment.solar_plant import PlantConfig, calculate_max_commitment
+from environment.solar_plant import PlantConfig, calculate_max_commitment
 
 
 # =============================================================================

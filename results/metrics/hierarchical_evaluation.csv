@@ -1,0 +1,15 @@
+policy,commitment,battery,daily_profit,episode_profit,imbalance_cost
+RL (Hierarchical),trained,trained,10688.67,74820.66,79127.55
+aggressive + greedy,aggressive,greedy,9389.08,65723.58,119515.79
+aggressive + conservative,aggressive,conservative,9241.93,64693.51,120642.9
+aggressive + do_nothing,aggressive,do_nothing,9143.23,64002.63,121430.81
+aggressive + smoothing,aggressive,smoothing,8876.7,62136.93,123272.1
+conservative + greedy,conservative,greedy,7480.25,52361.78,159453.26
+conservative + conservative,conservative,conservative,7267.63,50873.39,161144.0
+conservative + do_nothing,conservative,do_nothing,7114.05,49798.34,162424.87
+price_aware + greedy,price_aware,greedy,6933.0,48530.97,171103.65
+conservative + smoothing,conservative,smoothing,6864.88,48054.17,164114.25
+price_aware + conservative,price_aware,conservative,6705.97,46941.77,172892.71
+Heuristic (default),heuristic,heuristic,6550.09,45850.7,179185.0
+price_aware + do_nothing,price_aware,do_nothing,6530.16,45711.1,174345.54
+price_aware + smoothing,price_aware,smoothing,6271.68,43901.76,176116.38
