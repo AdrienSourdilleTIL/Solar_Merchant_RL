@@ -75,10 +75,16 @@ def set_all_seeds(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def create_env(data_path: Path, config: PlantConfig) -> BatteryEnv:
-    """Create a BatteryEnv from a CSV data file."""
+def create_env(data_path: Path, config: PlantConfig, commitment_policy: str = 'random') -> BatteryEnv:
+    """Create a BatteryEnv from a CSV data file.
+
+    Args:
+        data_path: Path to the CSV data file
+        config: Plant configuration
+        commitment_policy: How to generate commitments ('random' or 'trained')
+    """
     df = pd.read_csv(data_path, parse_dates=['datetime'])
-    return BatteryEnv(df, plant_config=config)
+    return BatteryEnv(df, plant_config=config, commitment_policy=commitment_policy)
 
 
 def evaluate_agent(model, env, n_episodes: int = 10) -> dict:
@@ -122,6 +128,9 @@ def main() -> None:
                         help='Path to checkpoint to resume from')
     parser.add_argument('--timesteps', type=int, default=TOTAL_TIMESTEPS,
                         help='Total training timesteps')
+    parser.add_argument('--commitment-policy', type=str, default='trained',
+                        choices=['random', 'trained'],
+                        help='Commitment policy: random (legacy) or trained (use commitment agent)')
     args = parser.parse_args()
 
     from stable_baselines3 import SAC
@@ -146,15 +155,15 @@ def main() -> None:
         print("Run prepare_dataset.py first.")
         return
 
-    print("Creating training environment...")
-    train_env = Monitor(create_env(train_path, PLANT_CONFIG))
+    print(f"Creating training environment (commitment_policy={args.commitment_policy})...")
+    train_env = Monitor(create_env(train_path, PLANT_CONFIG, args.commitment_policy))
 
     # Create eval environment if test data exists
     eval_env = None
     eval_callback = None
     if test_path.exists():
         print("Creating evaluation environment...")
-        eval_env = Monitor(create_env(test_path, PLANT_CONFIG))
+        eval_env = Monitor(create_env(test_path, PLANT_CONFIG, args.commitment_policy))
         eval_callback = EvalCallback(
             eval_env,
             best_model_save_path=str(MODEL_PATH / 'best'),
@@ -210,6 +219,7 @@ def main() -> None:
         print(f"  Observation space: {train_env.observation_space.shape}")
         print(f"  Action space: {train_env.action_space.shape}")
         print(f"  Episode length: 24 steps")
+        print(f"  Commitment policy: {args.commitment_policy}")
         print(f"\nOutput:")
         print(f"  Models: {MODEL_PATH}")
         print(f"  TensorBoard: {TENSORBOARD_LOG_DIR}")

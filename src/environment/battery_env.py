@@ -16,13 +16,15 @@ import gymnasium as gym
 import numpy as np
 import pandas as pd
 from gymnasium import spaces
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Optional, Tuple, Union, Callable
 
 from .solar_plant import (
     PlantConfig,
     Battery,
     Settlement,
     DataManager,
+    calculate_max_commitment,
 )
 
 
@@ -62,6 +64,7 @@ class BatteryEnv(gym.Env):
         self,
         data: pd.DataFrame,
         plant_config: Optional[PlantConfig] = None,
+        commitment_policy: Optional[Union[str, Callable]] = None,
         render_mode: Optional[str] = None
     ) -> None:
         """
@@ -70,6 +73,10 @@ class BatteryEnv(gym.Env):
         Args:
             data: DataFrame with required columns (see DataManager)
             plant_config: Plant configuration. Uses defaults if None.
+            commitment_policy: How to generate commitments for each episode:
+                - None or 'random': Random commitments (legacy behavior)
+                - 'trained': Use trained commitment agent
+                - Callable: Custom function(forecasts, prices, soc) -> commitments
             render_mode: Render mode ('human' or None)
         """
         super().__init__()
@@ -77,6 +84,9 @@ class BatteryEnv(gym.Env):
         self.config = plant_config or PlantConfig()
         self.data_manager = DataManager(data, self.config)
         self.render_mode = render_mode
+
+        # Set up commitment policy
+        self._setup_commitment_policy(commitment_policy)
 
         # Create battery
         self.battery = Battery(
@@ -115,6 +125,97 @@ class BatteryEnv(gym.Env):
             shape=(1,),
             dtype=np.float32
         )
+
+    def _setup_commitment_policy(self, policy: Optional[Union[str, Callable]]) -> None:
+        """Set up the commitment policy for generating episode commitments."""
+        if policy is None or policy == 'random':
+            self._commitment_policy_type = 'random'
+            self._commitment_policy = None
+        elif policy == 'trained':
+            self._load_trained_commitment_agent()
+        elif callable(policy):
+            self._commitment_policy_type = 'custom'
+            self._commitment_policy = policy
+        else:
+            raise ValueError(f"Unknown commitment policy: {policy}")
+
+    def _load_trained_commitment_agent(self) -> None:
+        """Load trained commitment agent for generating commitments."""
+        model_path = Path(__file__).parent.parent.parent / 'models' / 'commitment_agent' / 'best' / 'best_model.zip'
+
+        if not model_path.exists():
+            # Try final model
+            model_path = Path(__file__).parent.parent.parent / 'models' / 'commitment_agent' / 'commitment_agent_final.zip'
+
+        if not model_path.exists():
+            print(f"Warning: Trained commitment agent not found.")
+            print("Falling back to random commitment policy.")
+            self._commitment_policy_type = 'random'
+            self._commitment_policy = None
+            return
+
+        try:
+            from stable_baselines3 import SAC
+            self._trained_commitment_model = SAC.load(str(model_path))
+            self._commitment_policy_type = 'trained'
+            self._commitment_policy = self._get_trained_commitments
+            print(f"Loaded trained commitment agent from {model_path}")
+        except Exception as e:
+            print(f"Warning: Failed to load commitment agent: {e}")
+            print("Falling back to random commitment policy.")
+            self._commitment_policy_type = 'random'
+            self._commitment_policy = None
+
+    def _get_trained_commitments(self, start_idx: int) -> np.ndarray:
+        """Get commitments from trained commitment agent.
+
+        Builds the observation the commitment agent expects and gets its action.
+
+        Args:
+            start_idx: Starting data index for the 24-hour window
+
+        Returns:
+            Array of 24 hourly commitments (MWh)
+        """
+        # Get forecasts and prices for the 24-hour window
+        forecasts = self.data_manager.get_forecasts(start_idx, hours=24)
+        prices = self.data_manager.get_prices(start_idx, hours=24)
+
+        # Build observation for commitment agent (56 dimensions)
+        # forecast(24) + prices(24) + soc(1) + weather(2) + forecast_conf(1) + time(4)
+        row = self.data_manager.get_row(start_idx)
+
+        forecasts_norm = self.data_manager.normalize_forecasts(forecasts)
+        prices_norm = self.data_manager.normalize_prices(prices)
+        soc_norm = self.battery.soc / self.config.battery_capacity_mwh
+
+        temp_norm = row['temperature_c'] / self.data_manager.norm_factors['temperature']
+        irr_norm = row['irradiance_direct'] / self.data_manager.norm_factors['irradiance']
+        forecast_confidence = 0.85  # Placeholder
+
+        time_features = [
+            row['day_sin'], row['day_cos'],
+            row['month_sin'], row['month_cos']
+        ]
+
+        obs = np.concatenate([
+            forecasts_norm,
+            prices_norm,
+            [soc_norm],
+            [temp_norm, irr_norm],
+            [forecast_confidence],
+            time_features,
+        ]).astype(np.float32)
+
+        # Get action from commitment agent
+        action, _ = self._trained_commitment_model.predict(obs, deterministic=True)
+        action_clipped = np.clip(action, 0, 1)
+
+        # Convert action fractions to actual commitments
+        max_commitments = calculate_max_commitment(forecasts, self.config.battery_power_mw)
+        commitments = action_clipped * max_commitments
+
+        return commitments
 
     def _get_observation(self) -> np.ndarray:
         """Build observation vector for current state."""
@@ -219,8 +320,16 @@ class BatteryEnv(gym.Env):
             self.commitments = np.array(options['commitments'], dtype=np.float32)
             if len(self.commitments) != 24:
                 raise ValueError("Commitments must have 24 values")
+        elif self._commitment_policy_type == 'trained':
+            # Use trained commitment agent
+            self.commitments = self._get_trained_commitments(self.current_idx)
+        elif self._commitment_policy_type == 'custom' and self._commitment_policy is not None:
+            # Use custom commitment policy
+            forecasts = self.data_manager.get_forecasts(self.current_idx, hours=24)
+            prices = self.data_manager.get_prices(self.current_idx, hours=24)
+            self.commitments = self._commitment_policy(forecasts, prices, self.battery.soc)
         else:
-            # Generate random commitments for training diversity
+            # Generate random commitments (legacy behavior)
             self._generate_random_commitments()
 
         # Reset battery
@@ -375,15 +484,20 @@ class BatteryEnv(gym.Env):
             )
 
 
-def load_battery_env(data_path: str, **kwargs) -> BatteryEnv:
+def load_battery_env(
+    data_path: str,
+    commitment_policy: Optional[Union[str, Callable]] = None,
+    **kwargs
+) -> BatteryEnv:
     """Helper to load BatteryEnv from processed data file.
 
     Args:
         data_path: Path to CSV file with required columns
+        commitment_policy: How to generate commitments ('random', 'trained', or callable)
         **kwargs: Additional arguments passed to BatteryEnv
 
     Returns:
         Configured BatteryEnv instance
     """
     df = pd.read_csv(data_path, parse_dates=['datetime'])
-    return BatteryEnv(df, **kwargs)
+    return BatteryEnv(df, commitment_policy=commitment_policy, **kwargs)

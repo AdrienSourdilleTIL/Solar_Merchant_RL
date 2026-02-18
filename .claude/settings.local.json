@@ -32,7 +32,11 @@
       "mcp__filesystem__create_directory",
       "Bash(timeout:*)",
       "Bash(git checkout:*)",
-      "mcp__filesystem__search_files"
+      "mcp__filesystem__search_files",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(python3:*)",
+      "mcp__filesystem__write_file"
     ]
   }
 }

@@ -2,9 +2,9 @@
 
 **Teaching AI to trade solar energy on electricity markets**
 
-An AI agent learns to operate a solar farm with battery storage, making daily trading decisions on the wholesale electricity market. The result: **+13.8% higher profits** than the best rule-based strategy.
+A hierarchical RL system learns to operate a solar farm with battery storage, making daily trading decisions on the wholesale electricity market. The result: **+42% higher profits** than the best rule-based strategy.
 
-![Performance Comparison](results/figures/performance_comparison.png)
+![Cumulative Rewards Comparison](outputs/cumulative_rewards.png)
 
 ---
 
@@ -14,10 +14,10 @@ An AI agent learns to operate a solar farm with battery storage, making daily tr
 
 Imagine you own a 20 MW solar farm (enough to power ~5,000 homes). Every day at 11:00 AM, you must tell the electricity grid exactly how much energy you'll deliver tomorrow, hour by hour. Get it wrong, and you pay hefty penalties:
 
-- **Deliver less than promised?** Pay 1.5× the market price to buy replacement power
-- **Deliver more than promised?** Get only 0.6× the market price for your surplus
+- **Deliver less than promised?** Pay 1.5x the market price to buy replacement power
+- **Deliver more than promised?** Get only 0.6x the market price for your surplus
 
-The challenge: **solar production is unpredictable** (clouds, weather changes), and **electricity prices swing wildly** (€0 to €300+ per MWh). How do you decide what to promise?
+The challenge: **solar production is unpredictable** (clouds, weather changes), and **electricity prices swing wildly** (EUR 0 to EUR 300+ per MWh). How do you decide what to promise?
 
 ### Why AI?
 
@@ -35,9 +35,44 @@ This project deliberately creates a harder problem:
 - Dynamic wholesale prices (not fixed tariffs)
 - Day-ahead commitments (not just hour-by-hour)
 - Forecast uncertainty (15-25% error)
-- Asymmetric penalties (short ≠ long)
+- Asymmetric penalties (short != long)
 
 **Result**: RL now significantly outperforms rule-based approaches.
+
+---
+
+## Results
+
+### Performance Comparison (60-Day Test Period)
+
+| Strategy | Total Profit | Daily Average | vs. RL Agent |
+|----------|-------------|---------------|--------------|
+| **Hierarchical RL (Ours)** | **EUR 458,579** | **EUR 7,643/day** | -- |
+| Aggressive + Greedy | EUR 322,833 | EUR 5,381/day | -29.6% |
+| Conservative + Greedy | EUR 170,504 | EUR 2,842/day | -62.8% |
+| Conservative + Conservative | EUR 164,061 | EUR 2,734/day | -64.2% |
+| Conservative + Do-Nothing | EUR 158,608 | EUR 2,643/day | -65.4% |
+| Price-Aware + Greedy | EUR 142,901 | EUR 2,382/day | -68.8% |
+
+The RL agents achieve **+42% better profit** than the best baseline (Aggressive + Greedy) and **+170% better** than average baselines.
+
+### What Makes the RL Agent Smarter?
+
+![Agent Behavior Analysis](outputs/agent_behavior_analysis.png)
+
+**Key insight: Better risk management**
+
+| Metric | RL Agent | Conservative | Aggressive |
+|--------|----------|--------------|------------|
+| Mean Imbalance | **+1.59 MWh** | +3.38 MWh | +2.65 MWh |
+| Over-committed (penalty risk) | **68%** | 97% | 98% |
+
+The RL agent learned that:
+1. **Being short is very expensive** (1.5x penalty) - so avoid over-committing
+2. **Being long is cheaper** (only lose 40% of price) - acceptable trade-off
+3. **Adapt to conditions** - commit aggressively when confident, conservatively when uncertain
+
+Rule-based policies use fixed ratios (80%, 100%) regardless of conditions. The RL agent adapts dynamically.
 
 ---
 
@@ -46,29 +81,29 @@ This project deliberately creates a harder problem:
 We split the problem into two specialized AI agents that work together:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    HIERARCHICAL SYSTEM                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│   ┌──────────────────────┐                                   │
-│   │  COMMITMENT AGENT    │  Runs once daily at 11:00 AM     │
-│   │  "What should we     │                                   │
-│   │   promise to deliver │  Inputs: Weather forecast,        │
-│   │   tomorrow?"         │          Price forecast,          │
-│   │                      │          Battery level            │
-│   └──────────┬───────────┘                                   │
-│              │                                               │
-│              ▼ 24-hour delivery schedule                     │
-│                                                              │
-│   ┌──────────────────────┐                                   │
-│   │  BATTERY AGENT       │  Runs every hour                  │
-│   │  "How do we meet     │                                   │
-│   │   today's promises?" │  Inputs: Current solar output,    │
-│   │                      │          Commitment for this hour,│
-│   │                      │          Battery level            │
-│   └──────────────────────┘                                   │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                    HIERARCHICAL SYSTEM                       |
++-------------------------------------------------------------+
+|                                                              |
+|   +----------------------+                                   |
+|   |  COMMITMENT AGENT    |  Runs once daily at 11:00 AM     |
+|   |  "What should we     |                                   |
+|   |   promise to deliver |  Inputs: Weather forecast,        |
+|   |   tomorrow?"         |          Price forecast,          |
+|   |                      |          Battery level            |
+|   +----------+-----------+                                   |
+|              |                                               |
+|              v 24-hour delivery schedule                     |
+|                                                              |
+|   +----------------------+                                   |
+|   |  BATTERY AGENT       |  Runs every hour                  |
+|   |  "How do we meet     |                                   |
+|   |   today's promises?" |  Inputs: Current solar output,    |
+|   |                      |          Commitment for this hour,|
+|   |                      |          Battery level            |
+|   +----------------------+                                   |
+|                                                              |
++-------------------------------------------------------------+
 ```
 
 **Why two agents?**
@@ -76,44 +111,28 @@ We split the problem into two specialized AI agents that work together:
 - Different inputs: forecasts vs. real-time data
 - Easier to train: each agent focuses on one task
 
-Both agents use **SAC (Soft Actor-Critic)**, a state-of-the-art reinforcement learning algorithm that balances exploration and exploitation.
+Both agents use **SAC (Soft Actor-Critic)**, a state-of-the-art reinforcement learning algorithm.
 
 ---
 
-## Results
+## Training Convergence
 
-### The AI Beats All Rule-Based Strategies
+### Commitment Agent
+Trained for 100,000 steps, converging to ~3,145 EUR/episode reward.
 
-We tested 12 combinations of commitment strategies (conservative, aggressive, price-aware) and battery strategies (greedy, conservative, smoothing, do-nothing):
+### Battery Agent
+Trained for 200,000 steps with two approaches:
 
-| Strategy | Daily Profit | vs. RL Agent |
-|----------|-------------|--------------|
-| **RL Agent (Ours)** | **€10,689** | — |
-| Aggressive + Greedy | €9,389 | -12.2% |
-| Aggressive + Conservative | €9,242 | -13.5% |
-| Conservative + Greedy | €7,480 | -30.0% |
-| Default Heuristic | €6,550 | -38.7% |
+![Battery Training Runs](outputs/battery_training_runs.png)
 
-### How the AI Wins: Smarter Risk Management
+- **SAC_1 (random commits)**: Trained with random commitment schedules - baseline at ~1,268 EUR
+- **SAC_2 (trained commits)**: Trained with the commitment agent's decisions - improved to ~1,719 EUR
 
-The key insight: **the AI learned to reduce imbalance costs by 34%** while still maximizing revenue.
+The battery agent performs **35% better** when working with the trained commitment agent, showing the synergy between the two agents.
 
-![Imbalance Cost Comparison](results/figures/imbalance_cost_comparison.png)
+### Combined Training View
 
-Rule-based strategies either:
-- **Over-commit** (aggressive): High revenue but big penalties when forecasts are wrong
-- **Under-commit** (conservative): Low penalties but leaves money on the table
-
-The AI finds the sweet spot, adapting its strategy to market conditions.
-
-### Training Progress
-
-Both agents learned steadily over training:
-
-![Training Curves](results/figures/training_curves_hierarchical.png)
-
-- **Battery Agent**: 2,083 training episodes
-- **Commitment Agent**: 10,000 training episodes
+![Training Curves](outputs/training_curves_separate.png)
 
 ---
 
@@ -137,17 +156,20 @@ Both agents learned steadily over training:
 ### Prerequisites
 
 ```bash
-pip install gymnasium stable-baselines3 pandas numpy torch tabulate
+pip install gymnasium stable-baselines3 pandas numpy torch tabulate tensorboard
 ```
 
 ### Run Evaluation
 
 ```bash
-# Compare trained AI against all baselines
-python src/evaluation/evaluate_hierarchical_baselines.py
+# Compare trained AI against all baselines (generates cumulative rewards plot)
+python src/evaluation/plot_cumulative_rewards.py
 
-# View detailed agent performance
-python src/evaluation/evaluate_hierarchical.py
+# Analyze agent behavior differences
+python src/evaluation/analyze_agent_behavior.py
+
+# View training curves
+python src/evaluation/plot_training_curves.py
 ```
 
 ### Train From Scratch
@@ -156,14 +178,14 @@ python src/evaluation/evaluate_hierarchical.py
 # 1. Prepare the dataset
 python src/data_processing/prepare_dataset.py
 
-# 2. Train the battery agent
-python src/training/train_battery.py
-
-# 3. Train the commitment agent
+# 2. Train the commitment agent first
 python src/training/train_commitment.py
 
+# 3. Train the battery agent (uses trained commitment agent)
+python src/training/train_battery.py --commitment-policy trained
+
 # 4. Evaluate
-python src/evaluation/evaluate_hierarchical_baselines.py
+python src/evaluation/plot_cumulative_rewards.py
 ```
 
 ### Monitor Training
@@ -193,11 +215,17 @@ Solar_Merchant_RL/
 │   └── evaluation/          # Evaluation and visualization
 ├── models/                  # Trained agent checkpoints
 │   ├── battery_agent/
+│   │   ├── battery_agent_final.zip
+│   │   └── best/
 │   └── commitment_agent/
-├── results/
-│   ├── figures/             # Generated charts
-│   └── metrics/             # Evaluation CSVs
-└── outputs/                 # TensorBoard logs
+│       ├── commitment_agent_final.zip
+│       └── best/
+└── outputs/                 # TensorBoard logs and figures
+    ├── battery_agent/tensorboard/
+    ├── commitment_agent/tensorboard/
+    ├── cumulative_rewards.png
+    ├── training_curves_*.png
+    └── agent_behavior_analysis.png
 ```
 
 ---
@@ -208,17 +236,20 @@ Solar_Merchant_RL/
 
 Splitting the problem into two agents made training faster and more stable than a single monolithic agent. Each agent can focus on its specific task.
 
-### 2. The AI Learns Risk Management
+### 2. The AI Learns Asymmetric Risk Management
 
-The biggest improvement came from **reducing imbalance costs**, not from committing to higher volumes. The AI learned to be appropriately cautious when forecasts are uncertain.
+The biggest improvement came from understanding that **being short is much more expensive than being long**. The AI learned to:
+- Commit conservatively during uncertain conditions
+- Use the battery as a buffer for unexpected shortfalls
+- Accept being slightly long (lost revenue) to avoid being short (heavy penalties)
 
-### 3. Problem Complexity Matters for RL
+### 3. Synergy Between Agents
+
+The battery agent performs 35% better when trained alongside the commitment agent vs. random commitments. The agents learn complementary strategies.
+
+### 4. Problem Complexity Matters for RL
 
 In our previous work, simple home battery control didn't benefit from RL. This wholesale trading problem has enough complexity (price volatility, asymmetric penalties, forecast uncertainty) for RL to shine.
-
-### 4. Baseline Comparisons Are Essential
-
-Without rigorous comparison to rule-based strategies, it's easy to claim RL "works" when simple rules would do better. Our 12 baseline combinations provide a strong benchmark.
 
 ---
 
@@ -233,16 +264,17 @@ Without rigorous comparison to rule-based strategies, it's easy to claim RL "wor
 - Weather features (temperature, irradiance)
 - Seasonal/time encodings
 
-**Battery Agent** (17 dimensions):
+**Battery Agent** (21 dimensions):
 - Current hour, battery SOC
 - Current commitment and actual PV
 - Next 6 hours: commitments and forecasts
 - Cumulative imbalance, current price
+- Time features
 
 ### Action Spaces
 
-**Commitment Agent**: 24 continuous values [0,1] → commitment fractions per hour
-**Battery Agent**: 1 continuous value [0,1] → 0=full discharge, 0.5=idle, 1=full charge
+**Commitment Agent**: 24 continuous values [0,1] -> commitment fractions per hour
+**Battery Agent**: 1 continuous value [0,1] -> 0=full discharge, 0.5=idle, 1=full charge
 
 ### Reward Function
 
@@ -251,9 +283,9 @@ reward = revenue - imbalance_penalty - battery_degradation
 ```
 
 Where:
-- Revenue = delivered × day-ahead price
-- Imbalance = penalty for over/under delivery
-- Degradation = €0.01 per MWh battery throughput
+- Revenue = delivered x day-ahead price
+- Imbalance = penalty for over/under delivery (1.5x short, 0.6x long)
+- Degradation = EUR 0.01 per MWh battery throughput
 
 ---
 
